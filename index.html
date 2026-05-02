@@ -14,17 +14,18 @@
     <header class="topbar">
       <div class="topbar-group topbar-group-start">
         <button type="button" class="ghost-button" id="new-diagram-button">Nuovo</button>
-        <button type="button" class="ghost-button">Carica</button>
-        <button type="button" class="ghost-button">Salva</button>
+        <button type="button" class="ghost-button" id="load-diagram-button">Carica</button>
+            <button type="button" class="ghost-button" id="save-diagram-button">Salva JSON</button>
+            <button type="button" class="ghost-button" id="export-pdf-button">Salva PDF</button>
       </div>
       <div class="topbar-brand">
         <p class="eyebrow">Prototype</p>
         <h1>AlgoFlow</h1>
       </div>
       <div class="topbar-group topbar-group-end">
-        <button type="button" class="ghost-button" id="step-program-button">Passo passo</button>
-        <button type="button" class="primary-button" id="run-program-button">Esegui</button>
-        <button type="button" class="ghost-button" id="stop-program-button" disabled>Stop</button>
+        <button type="button" class="ghost-button" id="step-program-button" title="P">Passo</button>
+        <button type="button" class="primary-button" id="run-program-button" title="E">Esegui</button>
+        <button type="button" class="ghost-button" id="stop-program-button" title="Esc" disabled>Stop</button>
       </div>
     </header>
 
@@ -271,6 +272,7 @@ End</code></pre>
     </main>
   </div>
 
+  <input type="file" id="load-diagram-input" accept=".algoflow.json,.json,.pdf,application/pdf" hidden>
   <script src="app.js"></script>
 </body>
 </html>

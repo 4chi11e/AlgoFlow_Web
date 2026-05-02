@@ -1724,6 +1724,22 @@ button:disabled {
   color: var(--secondary);
   font-size: 0.82rem;
   font-weight: 700;
+  white-space: nowrap;
+}
+
+.console-status[data-tone="success"] {
+  background: rgba(31, 92, 91, 0.12);
+  color: #1f5c5b;
+}
+
+.console-status[data-tone="warning"] {
+  background: rgba(191, 124, 17, 0.14);
+  color: #8a5a06;
+}
+
+.console-status[data-tone="error"] {
+  background: rgba(180, 35, 24, 0.12);
+  color: #b42318;
 }
 
 .console-output {

@@ -6,6 +6,10 @@ const sidebarContent = document.querySelector(".sidebar-content");
 const sidebarResizer = document.querySelector("#sidebar-resizer");
 const variablesSection = document.querySelector(".variables-section");
 const newDiagramButton = document.querySelector("#new-diagram-button");
+const loadDiagramButton = document.querySelector("#load-diagram-button");
+const saveDiagramButton = document.querySelector("#save-diagram-button");
+const exportPdfButton = document.querySelector("#export-pdf-button");
+const loadDiagramInput = document.querySelector("#load-diagram-input");
 const runProgramButton = document.querySelector("#run-program-button");
 const stepProgramButton = document.querySelector("#step-program-button");
 const stopProgramButton = document.querySelector("#stop-program-button");
@@ -54,6 +58,17 @@ const forStepInput = document.querySelector("#for-step-input");
 const propertyForm = document.querySelector("#property-form");
 const STORAGE_KEY = "flowgorithm-web-diagram";
 const NODE_LABEL_PREFERENCE_KEY = "flowgorithm-web-show-node-type";
+const ALGOFLOW_FILE_FORMAT = "algoflow";
+const ALGOFLOW_FILE_VERSION = 1;
+const ALGOFLOW_FILE_EXTENSION = ".algoflow.json";
+const ALGOFLOW_PDF_EXTENSION = ".pdf";
+const ALGOFLOW_APP_NAME = "AlgoFlow";
+const ALGOFLOW_FILE_PICKER_ID = "algoflow-diagrams";
+const ALGOFLOW_PICKER_DB_NAME = "algoflow-picker-db";
+const ALGOFLOW_PICKER_STORE_NAME = "handles";
+const ALGOFLOW_PICKER_HANDLE_KEY = "last-handle";
+const ALGOFLOW_PDF_PAYLOAD_BEGIN = "ALGOFLOW_PAYLOAD_BEGIN";
+const ALGOFLOW_PDF_PAYLOAD_END = "ALGOFLOW_PAYLOAD_END";
 const NOT_YET_IMPLEMENTED_MESSAGE = "Questa funzione al momento non è utilizzabile perché non è ancora stata sviluppata.";
 
 const nodeDefinitions = {
@@ -381,6 +396,11 @@ const serializeNode = (node) => {
   return serializedNode;
 };
 
+const getPersistedFlowNodes = () =>
+  flowNodes
+    .filter((node) => !node.isDraft)
+    .map(serializeNode);
+
 const normalizeNode = (rawNode) => {
   if (
     !rawNode ||
@@ -447,12 +467,967 @@ const normalizeNode = (rawNode) => {
   return normalizedNode;
 };
 
-const saveFlowchartState = () => {
-  const persistedNodes = flowNodes
-    .filter((node) => !node.isDraft)
-    .map(serializeNode);
+const applyPersistedFlowNodes = (rawNodes) => {
+  if (!Array.isArray(rawNodes)) {
+    throw new Error("Il file non contiene un elenco di nodi valido.");
+  }
 
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(persistedNodes));
+  const validNodes = rawNodes.map(normalizeNode).filter(Boolean);
+
+  flowNodes.length = 0;
+  flowNodes.push(...validNodes);
+
+  let maxId = 0;
+  traverseNodes(flowNodes, (node) => {
+    maxId = Math.max(maxId, node.id);
+  });
+
+  nextNodeId = maxId + 1;
+  pendingInsertTarget = null;
+  editingNodeId = null;
+  lastConnectorButton = null;
+  selectedNodeIds = new Set();
+  previewSelectedNodeIds = new Set();
+  clearRuntimeSnapshot();
+};
+
+const getSuggestedDiagramFileName = () => {
+  const now = new Date();
+  const datePart = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-");
+
+  return `diagram-${datePart}${ALGOFLOW_FILE_EXTENSION}`;
+};
+
+const getSuggestedPdfFileName = () => getSuggestedDiagramFileName().replace(/\.algoflow\.json$/i, ALGOFLOW_PDF_EXTENSION);
+
+const openAlgoFlowPickerDatabase = () =>
+  new Promise((resolve, reject) => {
+    if (!("indexedDB" in window)) {
+      resolve(null);
+      return;
+    }
+
+    const request = window.indexedDB.open(ALGOFLOW_PICKER_DB_NAME, 1);
+
+    request.addEventListener("upgradeneeded", () => {
+      const database = request.result;
+
+      if (!database.objectStoreNames.contains(ALGOFLOW_PICKER_STORE_NAME)) {
+        database.createObjectStore(ALGOFLOW_PICKER_STORE_NAME);
+      }
+    });
+
+    request.addEventListener("success", () => {
+      resolve(request.result);
+    });
+
+    request.addEventListener("error", () => {
+      reject(request.error ?? new Error("Impossibile aprire il database dei file picker."));
+    });
+  });
+
+const loadLastAlgoFlowPickerHandle = async () => {
+  const database = await openAlgoFlowPickerDatabase();
+
+  if (!database) {
+    return null;
+  }
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(ALGOFLOW_PICKER_STORE_NAME, "readonly");
+    const store = transaction.objectStore(ALGOFLOW_PICKER_STORE_NAME);
+    const request = store.get(ALGOFLOW_PICKER_HANDLE_KEY);
+
+    request.addEventListener("success", () => {
+      resolve(request.result ?? null);
+      database.close();
+    });
+
+    request.addEventListener("error", () => {
+      database.close();
+      reject(request.error ?? new Error("Impossibile leggere l'ultima posizione usata."));
+    });
+  });
+};
+
+const saveLastAlgoFlowPickerHandle = async (handle) => {
+  if (!handle) {
+    return;
+  }
+
+  const database = await openAlgoFlowPickerDatabase();
+
+  if (!database) {
+    return;
+  }
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(ALGOFLOW_PICKER_STORE_NAME, "readwrite");
+    const store = transaction.objectStore(ALGOFLOW_PICKER_STORE_NAME);
+    const request = store.put(handle, ALGOFLOW_PICKER_HANDLE_KEY);
+
+    request.addEventListener("success", () => {
+      resolve();
+    });
+
+    request.addEventListener("error", () => {
+      reject(request.error ?? new Error("Impossibile salvare l'ultima posizione usata."));
+    });
+
+    transaction.addEventListener("complete", () => {
+      database.close();
+    });
+
+    transaction.addEventListener("error", () => {
+      database.close();
+    });
+
+    transaction.addEventListener("abort", () => {
+      database.close();
+    });
+  });
+};
+
+const buildAlgoFlowPickerOptions = async () => {
+  const options = {
+    id: ALGOFLOW_FILE_PICKER_ID,
+    types: [
+      {
+        description: "AlgoFlow JSON",
+        accept: {
+          "application/json": [ALGOFLOW_FILE_EXTENSION, ".json"],
+        },
+      },
+    ],
+  };
+
+  const lastHandle = await loadLastAlgoFlowPickerHandle().catch(() => null);
+
+  if (lastHandle) {
+    options.startIn = lastHandle;
+  } else {
+    options.startIn = "downloads";
+  }
+
+  return options;
+};
+
+const buildAlgoFlowImportPickerOptions = async () => {
+  const options = await buildAlgoFlowPickerOptions();
+
+  options.types = [
+    {
+      description: "Diagrammi AlgoFlow",
+      accept: {
+        "application/json": [ALGOFLOW_FILE_EXTENSION, ".json"],
+        "application/pdf": [ALGOFLOW_PDF_EXTENSION],
+      },
+    },
+  ];
+
+  return options;
+};
+
+const buildAlgoFlowPdfPickerOptions = async () => {
+  const options = await buildAlgoFlowPickerOptions();
+
+  options.types = [
+    {
+      description: "PDF con diagramma AlgoFlow",
+      accept: {
+        "application/pdf": [ALGOFLOW_PDF_EXTENSION],
+      },
+    },
+  ];
+
+  return options;
+};
+
+const buildAlgoFlowFileDocument = () => ({
+  format: ALGOFLOW_FILE_FORMAT,
+  version: ALGOFLOW_FILE_VERSION,
+  exportedAt: new Date().toISOString(),
+  app: {
+    name: ALGOFLOW_APP_NAME,
+  },
+  preferences: {
+    showNodeTypeInLabel,
+  },
+  diagram: {
+    nodes: getPersistedFlowNodes(),
+  },
+});
+
+const getPersistedNodesFromImportedDocument = (documentData) => {
+  if (Array.isArray(documentData)) {
+    return documentData;
+  }
+
+  if (!documentData || typeof documentData !== "object") {
+    throw new Error("Il file non contiene un documento AlgoFlow valido.");
+  }
+
+  if (documentData.format !== ALGOFLOW_FILE_FORMAT) {
+    throw new Error(`Formato non supportato: atteso "${ALGOFLOW_FILE_FORMAT}".`);
+  }
+
+  if (documentData.version !== ALGOFLOW_FILE_VERSION) {
+    throw new Error(`Versione file non supportata: ${String(documentData.version)}.`);
+  }
+
+  if (
+    Array.isArray(documentData.diagram?.nodes)
+  ) {
+    return documentData.diagram.nodes;
+  }
+
+  throw new Error("Il file AlgoFlow non contiene la sezione diagram.nodes.");
+};
+
+const getHasConfirmedNodes = () => flowNodes.some((node) => !node.isDraft);
+
+const confirmDiscardCurrentDiagram = () => {
+  if (!getHasConfirmedNodes()) {
+    return true;
+  }
+
+  return window.confirm("Vuoi davvero sostituire il diagramma corrente? Le modifiche non salvate andranno perse.");
+};
+
+const readFlowchartFile = async (file) => {
+  if (!(file instanceof File)) {
+    throw new Error("Nessun file selezionato.");
+  }
+
+  return file.text();
+};
+
+const isPdfDiagramFile = (file) => {
+  if (!(file instanceof File)) {
+    return false;
+  }
+
+  const normalizedName = typeof file.name === "string" ? file.name.toLowerCase() : "";
+  return file.type === "application/pdf" || normalizedName.endsWith(ALGOFLOW_PDF_EXTENSION);
+};
+
+const uint8ArrayToBase64 = (bytes) => {
+  let binary = "";
+
+  for (let index = 0; index < bytes.length; index += 0x8000) {
+    const chunk = bytes.subarray(index, index + 0x8000);
+    binary += String.fromCharCode(...chunk);
+  }
+
+  return window.btoa(binary);
+};
+
+const base64ToUint8Array = (encodedValue) => {
+  const binary = window.atob(encodedValue);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return bytes;
+};
+
+const concatUint8Arrays = (chunks) => {
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+
+  chunks.forEach((chunk) => {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  });
+
+  return result;
+};
+
+const formatPdfNumber = (value) => {
+  if (!Number.isFinite(value)) {
+    return "0";
+  }
+
+  const roundedValue = Math.abs(value) < 0.0001 ? 0 : value;
+  return roundedValue.toFixed(2).replace(/\.?0+$/, "");
+};
+
+const escapePdfLiteralString = (value) =>
+  String(value)
+    .replace(/\\/g, "\\\\")
+    .replace(/\(/g, "\\(")
+    .replace(/\)/g, "\\)");
+
+const encodePdfAscii = (value) => new TextEncoder().encode(value);
+
+const dataUrlToUint8Array = (dataUrl) => {
+  const [, encodedPayload = ""] = String(dataUrl).split(",", 2);
+  return base64ToUint8Array(encodedPayload);
+};
+
+const findByteSequence = (sourceBytes, patternBytes, fromIndex = 0) => {
+  if (!patternBytes.length || sourceBytes.length < patternBytes.length) {
+    return -1;
+  }
+
+  for (let index = fromIndex; index <= sourceBytes.length - patternBytes.length; index += 1) {
+    let matches = true;
+
+    for (let patternIndex = 0; patternIndex < patternBytes.length; patternIndex += 1) {
+      if (sourceBytes[index + patternIndex] !== patternBytes[patternIndex]) {
+        matches = false;
+        break;
+      }
+    }
+
+    if (matches) {
+      return index;
+    }
+  }
+
+  return -1;
+};
+
+const extractEmbeddedAlgoFlowJsonFromPdfBytes = (pdfBytes) => {
+  const beginMarker = encodePdfAscii(`% ${ALGOFLOW_PDF_PAYLOAD_BEGIN}`);
+  const endMarker = encodePdfAscii(`% ${ALGOFLOW_PDF_PAYLOAD_END}`);
+  const payloadStart = findByteSequence(pdfBytes, beginMarker);
+
+  if (payloadStart < 0) {
+    throw new Error("Il PDF non contiene alcun diagramma AlgoFlow incorporato.");
+  }
+
+  const payloadEnd = findByteSequence(pdfBytes, endMarker, payloadStart + beginMarker.length);
+
+  if (payloadEnd < 0) {
+    throw new Error("Il PDF contiene dati AlgoFlow incompleti.");
+  }
+
+  const payloadBytes = pdfBytes.slice(payloadStart + beginMarker.length, payloadEnd);
+  const payloadText = new TextDecoder("utf-8").decode(payloadBytes);
+  const encodedPayload = payloadText
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^%\s?/, "").trim())
+    .filter(Boolean)
+    .join("");
+
+  if (!encodedPayload) {
+    throw new Error("Il PDF non contiene dati AlgoFlow leggibili.");
+  }
+
+  try {
+    const jsonBytes = base64ToUint8Array(encodedPayload);
+    return new TextDecoder().decode(jsonBytes);
+  } catch {
+    throw new Error("I dati AlgoFlow incorporati nel PDF non sono validi.");
+  }
+};
+
+const readImportedFlowchartDocument = async (file) => {
+  if (!(file instanceof File)) {
+    throw new Error("Nessun file selezionato.");
+  }
+
+  if (!isPdfDiagramFile(file)) {
+    return readFlowchartFile(file);
+  }
+
+  const pdfBytes = new Uint8Array(await file.arrayBuffer());
+  return extractEmbeddedAlgoFlowJsonFromPdfBytes(pdfBytes);
+};
+
+const isTypingTarget = (target) =>
+  target instanceof HTMLInputElement ||
+  target instanceof HTMLTextAreaElement ||
+  target instanceof HTMLSelectElement ||
+  (target instanceof HTMLElement && target.isContentEditable);
+
+const importFlowchartFromJsonText = (rawText) => {
+  let documentData = null;
+
+  try {
+    documentData = JSON.parse(rawText);
+  } catch {
+    throw new Error("Il file selezionato non contiene JSON valido.");
+  }
+
+  const persistedNodes = getPersistedNodesFromImportedDocument(documentData);
+
+  cancelExecution();
+  removeDraftNode();
+  closePropertyDialog({ restoreFocus: false });
+  closeInsertDialog();
+  applyPersistedFlowNodes(persistedNodes);
+
+  if (
+    documentData &&
+    typeof documentData === "object" &&
+    !Array.isArray(documentData) &&
+    typeof documentData.preferences?.showNodeTypeInLabel === "boolean"
+  ) {
+    showNodeTypeInLabel = documentData.preferences.showNodeTypeInLabel;
+    saveNodeLabelPreference();
+
+    if (showNodeTypeToggle) {
+      showNodeTypeToggle.checked = showNodeTypeInLabel;
+    }
+  }
+
+  saveFlowchartState();
+  renderFlowchart();
+};
+
+const exportFlowchartToJsonFile = async () => {
+  const documentData = buildAlgoFlowFileDocument();
+  const serializedDocument = JSON.stringify(documentData, null, 2);
+  const suggestedFileName = getSuggestedDiagramFileName();
+
+  if (typeof window.showSaveFilePicker === "function") {
+    try {
+      const pickerOptions = await buildAlgoFlowPickerOptions();
+      const fileHandle = await window.showSaveFilePicker({
+        ...pickerOptions,
+        suggestedName: suggestedFileName,
+      });
+      const writable = await fileHandle.createWritable();
+      await writable.write(serializedDocument);
+      await writable.close();
+      await saveLastAlgoFlowPickerHandle(fileHandle).catch(() => {});
+      return;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
+    }
+  }
+
+  const blob = new Blob([serializedDocument], { type: "application/json" });
+  const objectUrl = URL.createObjectURL(blob);
+  const downloadLink = document.createElement("a");
+
+  downloadLink.href = objectUrl;
+  downloadLink.download = suggestedFileName;
+  downloadLink.click();
+
+  window.setTimeout(() => {
+    URL.revokeObjectURL(objectUrl);
+  }, 0);
+};
+
+const buildPrintableDiagramSvgMarkup = () => {
+  const diagramSvg = flowchartRoot?.querySelector(".diagram-svg");
+
+  if (!(diagramSvg instanceof SVGElement)) {
+    throw new Error("Non c'è alcun diagramma da esportare in PDF.");
+  }
+
+  const printableSvg = diagramSvg.cloneNode(true);
+
+  printableSvg.removeAttribute("id");
+  printableSvg.style.width = "100%";
+  printableSvg.style.height = "auto";
+  printableSvg.style.maxWidth = "100%";
+
+  return printableSvg.outerHTML;
+};
+
+const openPdfPrintPreview = () => {
+  const printableSvgMarkup = buildPrintableDiagramSvgMarkup();
+  const stylesheetUrl = new URL("styles.css", window.location.href).href;
+  const documentTitle = `AlgoFlow PDF Preview`;
+  const previewHtml = `
+    <!DOCTYPE html>
+    <html lang="it">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>${documentTitle}</title>
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+      <link rel="stylesheet" href="${stylesheetUrl}">
+      <style>
+        body {
+          margin: 0;
+          background: white;
+        }
+
+        .pdf-sheet {
+          padding: 18mm 16mm;
+        }
+
+        .pdf-header {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          gap: 16px;
+          margin-bottom: 10mm;
+        }
+
+        .pdf-title {
+          font-family: "Space Grotesk", sans-serif;
+          font-size: 20pt;
+          font-weight: 700;
+          color: #2f2419;
+        }
+
+        .pdf-subtitle {
+          font-family: "Manrope", sans-serif;
+          font-size: 10pt;
+          color: #6f6253;
+        }
+
+        .pdf-diagram {
+          width: 100%;
+          overflow: hidden;
+        }
+
+        .pdf-diagram .diagram-svg {
+          width: 100% !important;
+          height: auto !important;
+        }
+
+        @page {
+          size: A4 portrait;
+          margin: 0;
+        }
+
+        @media print {
+          body {
+            print-color-adjust: exact;
+            -webkit-print-color-adjust: exact;
+          }
+        }
+      </style>
+      <script>
+        window.addEventListener("load", () => {
+          window.focus();
+          window.print();
+        }, { once: true });
+      </script>
+    </head>
+    <body>
+      <main class="pdf-sheet">
+        <header class="pdf-header">
+          <div class="pdf-title">AlgoFlow</div>
+          <div class="pdf-subtitle">Diagramma esportato il ${new Date().toLocaleDateString("it-IT")}</div>
+        </header>
+        <section class="pdf-diagram">
+          ${printableSvgMarkup}
+        </section>
+      </main>
+    </body>
+    </html>
+  `;
+  const previewBlob = new Blob([previewHtml], { type: "text/html" });
+  const previewUrl = URL.createObjectURL(previewBlob);
+  const printWindow = window.open(previewUrl, "_blank");
+
+  if (!printWindow) {
+    URL.revokeObjectURL(previewUrl);
+    throw new Error("Il browser ha bloccato l'apertura della finestra di stampa.");
+  }
+
+  window.setTimeout(() => {
+    URL.revokeObjectURL(previewUrl);
+  }, 60000);
+};
+
+const collectDocumentStylesForPdfSvg = () => {
+  const styleChunks = [];
+
+  Array.from(document.styleSheets).forEach((styleSheet) => {
+    try {
+      const cssRules = Array.from(styleSheet.cssRules ?? []);
+
+      cssRules.forEach((rule) => {
+        styleChunks.push(rule.cssText);
+      });
+    } catch {
+      // Ignore inaccessible stylesheets.
+    }
+  });
+
+  styleChunks.push(`
+    .svg-node-hit,
+    .svg-connector-hit,
+    .svg-connector-hit-path {
+      display: none !important;
+    }
+  `);
+
+  return styleChunks.join("\n");
+};
+
+const simplifySvgLabelsForPdf = (printableSvg) => {
+  const svgNamespace = "http://www.w3.org/2000/svg";
+
+  printableSvg.querySelectorAll("foreignObject").forEach((foreignObject) => {
+    const textContent = foreignObject.textContent?.replace(/\s+/g, " ").trim() ?? "";
+
+    if (!textContent) {
+      foreignObject.remove();
+      return;
+    }
+
+    const x = Number(foreignObject.getAttribute("x") ?? "0");
+    const y = Number(foreignObject.getAttribute("y") ?? "0");
+    const width = Number(foreignObject.getAttribute("width") ?? "0");
+    const height = Number(foreignObject.getAttribute("height") ?? "0");
+    const isTerminal = foreignObject.closest(".svg-terminal-node");
+
+    const textNode = document.createElementNS(svgNamespace, "text");
+    textNode.setAttribute("x", String(x + width / 2));
+    textNode.setAttribute("y", String(y + height / 2));
+    textNode.setAttribute("text-anchor", "middle");
+    textNode.setAttribute("dominant-baseline", "middle");
+    textNode.setAttribute("fill", "#2f2419");
+    textNode.setAttribute("font-family", isTerminal ? "Georgia, serif" : "Arial, sans-serif");
+    textNode.setAttribute("font-size", isTerminal ? "22" : "16");
+    textNode.setAttribute("font-weight", isTerminal ? "600" : "700");
+    textNode.textContent = textContent;
+
+    foreignObject.replaceWith(textNode);
+  });
+
+  printableSvg.querySelectorAll(".svg-node-hit, .svg-connector-hit, .svg-connector-hit-path").forEach((node) => {
+    node.remove();
+  });
+};
+
+const inlineSvgComputedStylesForPdf = (sourceSvg, printableSvg) => {
+  const styleSelectors = [
+    ".svg-node-shape",
+    ".svg-terminal-shape",
+    ".svg-connector-line",
+    ".svg-if-line",
+    ".svg-connector-arrow",
+    ".svg-branch-label",
+    "text",
+  ];
+
+  styleSelectors.forEach((selector) => {
+    const sourceNodes = Array.from(sourceSvg.querySelectorAll(selector));
+    const printableNodes = Array.from(printableSvg.querySelectorAll(selector));
+
+    sourceNodes.forEach((sourceNode, index) => {
+      const printableNode = printableNodes[index];
+
+      if (!(sourceNode instanceof SVGElement) || !(printableNode instanceof SVGElement)) {
+        return;
+      }
+
+      const computedStyle = window.getComputedStyle(sourceNode);
+
+      [
+        "fill",
+        "stroke",
+        "stroke-width",
+        "stroke-dasharray",
+        "stroke-linecap",
+        "stroke-linejoin",
+        "font-family",
+        "font-size",
+        "font-weight",
+        "letter-spacing",
+        "text-anchor",
+      ].forEach((propertyName) => {
+        const propertyValue = computedStyle.getPropertyValue(propertyName).trim();
+
+        if (propertyValue) {
+          printableNode.style.setProperty(propertyName, propertyValue);
+        }
+      });
+    });
+  });
+};
+
+const buildPrintableDiagramImageDataUrlForPdf = async () => {
+  const diagramSvg = flowchartRoot?.querySelector(".diagram-svg");
+
+  if (!(diagramSvg instanceof SVGElement)) {
+    throw new Error("Non c'è alcun diagramma da esportare in PDF.");
+  }
+
+  const printableSvg = diagramSvg.cloneNode(true);
+  const viewBox = printableSvg.viewBox.baseVal;
+
+  if (!viewBox || !viewBox.width || !viewBox.height) {
+    throw new Error("Il diagramma non ha dimensioni esportabili.");
+  }
+
+  printableSvg.removeAttribute("id");
+  printableSvg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  printableSvg.setAttribute("xmlns:xhtml", "http://www.w3.org/1999/xhtml");
+  printableSvg.setAttribute("width", String(viewBox.width));
+  printableSvg.setAttribute("height", String(viewBox.height));
+  inlineSvgComputedStylesForPdf(diagramSvg, printableSvg);
+  simplifySvgLabelsForPdf(printableSvg);
+
+  const styleNode = document.createElementNS("http://www.w3.org/2000/svg", "style");
+  styleNode.textContent = collectDocumentStylesForPdfSvg();
+  printableSvg.insertBefore(styleNode, printableSvg.firstChild);
+
+  const serializedSvg = new XMLSerializer().serializeToString(printableSvg);
+  const svgBlob = new Blob([serializedSvg], { type: "image/svg+xml;charset=utf-8" });
+  const svgUrl = URL.createObjectURL(svgBlob);
+
+  try {
+    const image = await new Promise((resolve, reject) => {
+      const nextImage = new Image();
+
+      nextImage.onload = () => resolve(nextImage);
+      nextImage.onerror = () => reject(new Error("Impossibile renderizzare il diagramma per il PDF."));
+      nextImage.src = svgUrl;
+    });
+
+    const scale = 2;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(viewBox.width * scale);
+    canvas.height = Math.round(viewBox.height * scale);
+
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      throw new Error("Impossibile preparare il canvas per l'esportazione PDF.");
+    }
+
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    return canvas.toDataURL("image/png");
+  } finally {
+    URL.revokeObjectURL(svgUrl);
+  }
+};
+
+const buildPrintableDiagramCanvasForPdf = async () => {
+  const diagramSvg = flowchartRoot?.querySelector(".diagram-svg");
+
+  if (!(diagramSvg instanceof SVGElement)) {
+    throw new Error("Non c'è alcun diagramma da esportare in PDF.");
+  }
+
+  const printableSvg = diagramSvg.cloneNode(true);
+  const viewBox = printableSvg.viewBox.baseVal;
+
+  if (!viewBox || !viewBox.width || !viewBox.height) {
+    throw new Error("Il diagramma non ha dimensioni esportabili.");
+  }
+
+  printableSvg.removeAttribute("id");
+  printableSvg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  printableSvg.setAttribute("xmlns:xhtml", "http://www.w3.org/1999/xhtml");
+  printableSvg.setAttribute("width", String(viewBox.width));
+  printableSvg.setAttribute("height", String(viewBox.height));
+  inlineSvgComputedStylesForPdf(diagramSvg, printableSvg);
+  simplifySvgLabelsForPdf(printableSvg);
+
+  const styleNode = document.createElementNS("http://www.w3.org/2000/svg", "style");
+  styleNode.textContent = collectDocumentStylesForPdfSvg();
+  printableSvg.insertBefore(styleNode, printableSvg.firstChild);
+
+  const serializedSvg = new XMLSerializer().serializeToString(printableSvg);
+  const svgBlob = new Blob([serializedSvg], { type: "image/svg+xml;charset=utf-8" });
+  const svgUrl = URL.createObjectURL(svgBlob);
+
+  try {
+    const image = await new Promise((resolve, reject) => {
+      const nextImage = new Image();
+
+      nextImage.onload = () => resolve(nextImage);
+      nextImage.onerror = () => reject(new Error("Impossibile renderizzare il diagramma per il PDF."));
+      nextImage.src = svgUrl;
+    });
+
+    const scale = 2;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(viewBox.width * scale);
+    canvas.height = Math.round(viewBox.height * scale);
+
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      throw new Error("Impossibile preparare il canvas per l'esportazione PDF.");
+    }
+
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    return canvas;
+  } finally {
+    URL.revokeObjectURL(svgUrl);
+  }
+};
+
+const buildEmbeddedAlgoFlowPdfPayloadComment = (serializedDocument) => {
+  const encodedPayload = uint8ArrayToBase64(new TextEncoder().encode(serializedDocument));
+  const payloadChunks = encodedPayload.match(/.{1,120}/g) ?? [];
+  const lines = [
+    `% ${ALGOFLOW_PDF_PAYLOAD_BEGIN}`,
+    ...payloadChunks.map((chunk) => `% ${chunk}`),
+    `% ${ALGOFLOW_PDF_PAYLOAD_END}`,
+    "",
+  ];
+
+  return lines.join("\n");
+};
+
+const buildAlgoFlowPdfBytes = async () => {
+  const printableCanvas = await buildPrintableDiagramCanvasForPdf();
+  const serializedDocument = JSON.stringify(buildAlgoFlowFileDocument(), null, 2);
+  const jpegDataUrl = printableCanvas.toDataURL("image/jpeg", 0.92);
+  const imageBytes = dataUrlToUint8Array(jpegDataUrl);
+  const exportedDateLabel = new Date().toLocaleDateString("it-IT");
+  const pageWidthPoints = 595.28;
+  const horizontalMargin = 34;
+  const topMargin = 30;
+  const bottomMargin = 28;
+  const headerGap = 20;
+  const titleBaselineOffset = 24;
+  const subtitleBaselineOffset = 26;
+  const imageWidthPoints = pageWidthPoints - (horizontalMargin * 2);
+  const imageHeightPoints = imageWidthPoints * (printableCanvas.height / printableCanvas.width);
+  const pageHeightPoints = Math.max(220, topMargin + headerGap + imageHeightPoints + bottomMargin);
+  const imageX = horizontalMargin;
+  const imageY = bottomMargin;
+  const titleY = pageHeightPoints - titleBaselineOffset;
+  const subtitleY = pageHeightPoints - subtitleBaselineOffset;
+  const subtitleText = `Diagramma esportato il ${exportedDateLabel}`;
+  const contentStream = [
+    "BT",
+    "/F1 28 Tf",
+    "0.184 0.141 0.098 rg",
+    `${formatPdfNumber(horizontalMargin)} ${formatPdfNumber(titleY)} Td`,
+    `(${escapePdfLiteralString(ALGOFLOW_APP_NAME)}) Tj`,
+    "ET",
+    "BT",
+    "/F1 11 Tf",
+    "0.435 0.384 0.325 rg",
+    `${formatPdfNumber(pageWidthPoints - horizontalMargin - 205)} ${formatPdfNumber(subtitleY)} Td`,
+    `(${escapePdfLiteralString(subtitleText)}) Tj`,
+    "ET",
+    "q",
+    `${formatPdfNumber(imageWidthPoints)} 0 0 ${formatPdfNumber(imageHeightPoints)} ${formatPdfNumber(imageX)} ${formatPdfNumber(imageY)} cm`,
+    "/Im1 Do",
+    "Q",
+    "",
+  ].join("\n");
+  const payloadComment = buildEmbeddedAlgoFlowPdfPayloadComment(serializedDocument);
+  const pdfHeader = `%PDF-1.4\n%\u00E2\u00E3\u00CF\u00D3\n${payloadComment}`;
+  const objectChunks = [];
+  const objectOffsets = [0];
+
+  const pushPdfObject = (objectNumber, chunks) => {
+    const header = encodePdfAscii(`${objectNumber} 0 obj\n`);
+    const footer = encodePdfAscii(`\nendobj\n`);
+    objectChunks.push(concatUint8Arrays([header, ...chunks, footer]));
+  };
+
+  pushPdfObject(1, [encodePdfAscii("<< /Type /Catalog /Pages 2 0 R >>\n")]);
+  pushPdfObject(2, [encodePdfAscii("<< /Type /Pages /Kids [3 0 R] /Count 1 >>\n")]);
+  pushPdfObject(3, [
+    encodePdfAscii(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${formatPdfNumber(pageWidthPoints)} ${formatPdfNumber(pageHeightPoints)}] ` +
+      "/Resources << /Font << /F1 4 0 R >> /XObject << /Im1 5 0 R >> >> /Contents 6 0 R >>\n"
+    ),
+  ]);
+  pushPdfObject(4, [encodePdfAscii("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\n")]);
+  pushPdfObject(5, [
+    encodePdfAscii(
+      `<< /Type /XObject /Subtype /Image /Width ${printableCanvas.width} /Height ${printableCanvas.height} ` +
+      `/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${imageBytes.length} >>\nstream\n`
+    ),
+    imageBytes,
+    encodePdfAscii("\nendstream\n"),
+  ]);
+  pushPdfObject(6, [
+    encodePdfAscii(`<< /Length ${encodePdfAscii(contentStream).length} >>\nstream\n${contentStream}endstream\n`),
+  ]);
+  pushPdfObject(7, [
+    encodePdfAscii(
+      `<< /Title (${escapePdfLiteralString(getSuggestedPdfFileName())}) /Producer (${escapePdfLiteralString(ALGOFLOW_APP_NAME)}) ` +
+      ` /Creator (${escapePdfLiteralString(ALGOFLOW_APP_NAME)}) >>\n`
+    ),
+  ]);
+
+  let currentOffset = encodePdfAscii(pdfHeader).length;
+
+  objectChunks.forEach((chunk) => {
+    objectOffsets.push(currentOffset);
+    currentOffset += chunk.length;
+  });
+
+  const xrefOffset = currentOffset;
+  const xrefLines = ["xref", `0 ${objectOffsets.length}`, "0000000000 65535 f "];
+
+  for (let index = 1; index < objectOffsets.length; index += 1) {
+    xrefLines.push(`${String(objectOffsets[index]).padStart(10, "0")} 00000 n `);
+  }
+
+  const trailer = [
+    "trailer",
+    `<< /Size ${objectOffsets.length} /Root 1 0 R /Info 7 0 R >>`,
+    "startxref",
+    String(xrefOffset),
+    "%%EOF",
+    "",
+  ].join("\n");
+
+  return concatUint8Arrays([
+    encodePdfAscii(pdfHeader),
+    ...objectChunks,
+    encodePdfAscii(`${xrefLines.join("\n")}\n${trailer}`),
+  ]);
+};
+
+const exportFlowchartToPdfFile = async () => {
+  const pdfBytes = await buildAlgoFlowPdfBytes();
+  const suggestedFileName = getSuggestedPdfFileName();
+
+  if (typeof window.showSaveFilePicker === "function") {
+    try {
+      const pickerOptions = await buildAlgoFlowPdfPickerOptions();
+      const fileHandle = await window.showSaveFilePicker({
+        ...pickerOptions,
+        suggestedName: suggestedFileName,
+      });
+      const writable = await fileHandle.createWritable();
+      await writable.write(pdfBytes);
+      await writable.close();
+      await saveLastAlgoFlowPickerHandle(fileHandle).catch(() => {});
+      return;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
+    }
+  }
+
+  const blob = new Blob([pdfBytes], { type: "application/pdf" });
+  const objectUrl = URL.createObjectURL(blob);
+  const downloadLink = document.createElement("a");
+
+  downloadLink.href = objectUrl;
+  downloadLink.download = suggestedFileName;
+  downloadLink.click();
+
+  window.setTimeout(() => {
+    URL.revokeObjectURL(objectUrl);
+  }, 0);
+};
+
+const saveFlowchartState = () => {
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(getPersistedFlowNodes()));
 };
 
 const loadFlowchartState = () => {
@@ -469,16 +1444,7 @@ const loadFlowchartState = () => {
       return;
     }
 
-    const validNodes = parsedNodes.map(normalizeNode).filter(Boolean);
-
-    flowNodes.length = 0;
-    flowNodes.push(...validNodes);
-
-    let maxId = 0;
-    traverseNodes(flowNodes, (node) => {
-      maxId = Math.max(maxId, node.id);
-    });
-    nextNodeId = maxId + 1;
+    applyPersistedFlowNodes(parsedNodes);
   } catch {
     window.localStorage.removeItem(STORAGE_KEY);
   }
@@ -1078,7 +2044,9 @@ const createRuntimeState = (mode) => {
 
   return {
     mode,
-    status: mode === "step" ? "Passo passo pronto" : "Esecuzione in corso",
+    statusLabel: mode === "step" ? "Pronto" : "In corso",
+    statusTone: "success",
+    statusDetail: mode === "step" ? "Passo pronto" : "Esecuzione in corso",
     variableMeta,
     variableValues,
     outputEntries: [],
@@ -1090,12 +2058,14 @@ const createRuntimeState = (mode) => {
   };
 };
 
-const setRuntimeStatus = (status) => {
+const setRuntimeStatus = (label, { tone = "success", detail = label } = {}) => {
   if (!runtimeState) {
     return;
   }
 
-  runtimeState.status = status;
+  runtimeState.statusLabel = label;
+  runtimeState.statusTone = tone;
+  runtimeState.statusDetail = detail;
 };
 
 const addConsoleEntry = (kind, text) => {
@@ -1118,7 +2088,9 @@ const refreshExecutionUi = () => {
 
 const renderConsolePanel = () => {
   if (terminalStatus) {
-    terminalStatus.textContent = runtimeState?.status ?? "Pronto";
+    terminalStatus.textContent = runtimeState?.statusLabel ?? "Pronto";
+    terminalStatus.dataset.tone = runtimeState?.statusTone ?? "success";
+    terminalStatus.title = runtimeState?.statusDetail ?? "Pronto";
   }
 
   if (consoleOutput) {
@@ -1158,13 +2130,15 @@ const renderConsolePanel = () => {
 
 const syncExecutionControls = () => {
   if (runProgramButton) {
-    runProgramButton.disabled = isProgramRunning;
+    const isAwaitingInput = Boolean(runtimeState?.waitingInput);
+    runProgramButton.disabled = (isProgramRunning && executionMode !== "step") || isAwaitingInput;
   }
 
   if (stepProgramButton) {
     const isAwaitingStep = executionMode === "step" && typeof pendingStepResolver === "function";
     const isAwaitingInput = Boolean(runtimeState?.waitingInput);
-    stepProgramButton.textContent = executionMode === "step" ? "Avanza" : "Passo passo";
+    stepProgramButton.textContent = "Passo";
+    stepProgramButton.title = "P";
     stepProgramButton.disabled = executionMode === "run" || (executionMode === "step" && !isAwaitingStep) || isAwaitingInput;
   }
 
@@ -1370,7 +2344,10 @@ const requestRuntimeInput = (variableName) => {
       variableName,
       label: `Inserisci un valore per ${variableName}`,
     };
-    setRuntimeStatus(`In attesa di input per ${variableName}`);
+    setRuntimeStatus("Input richiesto", {
+      tone: "warning",
+      detail: `In attesa di input per ${variableName}`,
+    });
     refreshExecutionUi();
     focusConsoleInput();
   });
@@ -1387,7 +2364,10 @@ const submitRuntimeInput = () => {
   try {
     setRuntimeVariableValue(variableName, rawValue, { fromInput: true });
   } catch (error) {
-    setRuntimeStatus(error.message);
+    setRuntimeStatus("Errore", {
+      tone: "error",
+      detail: error.message,
+    });
     addConsoleEntry("error", error.message);
     refreshExecutionUi();
     focusConsoleInput();
@@ -1399,7 +2379,10 @@ const submitRuntimeInput = () => {
   runtimeState.waitingInput = null;
   const resolver = pendingInputResolver;
   pendingInputResolver = null;
-  setRuntimeStatus(executionMode === "step" ? "Passo passo pronto" : "Esecuzione in corso");
+  setRuntimeStatus(executionMode === "step" ? "Pronto" : "In corso", {
+    tone: "success",
+    detail: executionMode === "step" ? "Passo pronto" : "Esecuzione in corso",
+  });
   refreshExecutionUi();
   resolver();
 };
@@ -1407,7 +2390,10 @@ const submitRuntimeInput = () => {
 const waitForNextStep = () =>
   new Promise((resolve) => {
     pendingStepResolver = resolve;
-    setRuntimeStatus("Passo passo: premi Avanza");
+    setRuntimeStatus("Pronto", {
+      tone: "success",
+      detail: "Passo: premi Passo",
+    });
     refreshExecutionUi();
   });
 
@@ -1418,7 +2404,10 @@ const advanceStepExecution = () => {
 
   const resolver = pendingStepResolver;
   pendingStepResolver = null;
-  setRuntimeStatus("Esecuzione in corso");
+  setRuntimeStatus("In corso", {
+    tone: "success",
+    detail: "Esecuzione in corso",
+  });
   refreshExecutionUi();
   resolver();
 };
@@ -1429,7 +2418,9 @@ const cancelExecution = () => {
   }
 
   runtimeState.cancelled = true;
-  runtimeState.status = "Interruzione in corso";
+  runtimeState.statusLabel = "Stop";
+  runtimeState.statusTone = "warning";
+  runtimeState.statusDetail = "Interruzione in corso";
 
   if (typeof pendingStepResolver === "function") {
     const resolver = pendingStepResolver;
@@ -1455,9 +2446,11 @@ const clearRuntimeSnapshot = () => {
   pendingInputResolver = null;
 };
 
-const finalizeExecutionSession = (status, { keepCursor = false } = {}) => {
+const finalizeExecutionSession = (label, { keepCursor = false, tone = "success", detail = label } = {}) => {
   if (runtimeState) {
-    runtimeState.status = status;
+    runtimeState.statusLabel = label;
+    runtimeState.statusTone = tone;
+    runtimeState.statusDetail = detail;
     runtimeState.waitingInput = null;
     runtimeState.completed = true;
   }
@@ -1491,7 +2484,10 @@ const pauseBeforeNodeExecution = async (node) => {
 
   executionCursor = node.id;
   runtimeState.currentNodeId = node.id;
-  setRuntimeStatus(executionMode === "step" ? "Passo passo pronto" : "Esecuzione in corso");
+  setRuntimeStatus(executionMode === "step" ? "Pronto" : "In corso", {
+    tone: "success",
+    detail: executionMode === "step" ? "Passo pronto" : "Esecuzione in corso",
+  });
   renderFlowchart();
   refreshExecutionUi();
 
@@ -1621,6 +2617,17 @@ const startProgramExecution = async (mode) => {
   if (isProgramRunning) {
     if (mode === "step" && executionMode === "step") {
       advanceStepExecution();
+      return;
+    }
+
+    if (mode === "run" && executionMode === "step") {
+      executionMode = "run";
+      setRuntimeStatus("In corso", {
+        tone: "success",
+        detail: "Esecuzione in corso",
+      });
+      refreshExecutionUi();
+      advanceStepExecution();
     }
 
     return;
@@ -1647,14 +2654,23 @@ const startProgramExecution = async (mode) => {
     await executeRuntimeNodes(flowNodes);
 
     if (runtimeState?.cancelled) {
-      finalizeExecutionSession("Esecuzione interrotta");
+      finalizeExecutionSession("Interrotta", {
+        tone: "warning",
+        detail: "Esecuzione interrotta",
+      });
       return;
     }
 
-    finalizeExecutionSession("Esecuzione completata");
+    finalizeExecutionSession("Completata", {
+      tone: "success",
+      detail: "Esecuzione completata",
+    });
   } catch (error) {
     if (error instanceof Error && error.message === "__execution_cancelled__") {
-      finalizeExecutionSession("Esecuzione interrotta");
+      finalizeExecutionSession("Interrotta", {
+        tone: "warning",
+        detail: "Esecuzione interrotta",
+      });
       return;
     }
 
@@ -1664,7 +2680,11 @@ const startProgramExecution = async (mode) => {
       addConsoleEntry("error", message);
     }
 
-    finalizeExecutionSession(message, { keepCursor: true });
+    finalizeExecutionSession("Errore", {
+      keepCursor: true,
+      tone: "error",
+      detail: message,
+    });
   }
 };
 
@@ -3322,16 +4342,8 @@ if (propertyDialogBackdrop) {
 
 if (newDiagramButton) {
   newDiagramButton.addEventListener("click", () => {
-    const hasConfirmedNodes = flowNodes.some((node) => !node.isDraft);
-
-    if (hasConfirmedNodes) {
-      const confirmed = window.confirm(
-        "Vuoi davvero creare un nuovo diagramma? Le modifiche non salvate andranno perse."
-      );
-
-      if (!confirmed) {
-        return;
-      }
+    if (!confirmDiscardCurrentDiagram()) {
+      return;
     }
 
     if (!propertyDialogBackdrop.hidden) {
@@ -3344,6 +4356,78 @@ if (newDiagramButton) {
 
     document.body.classList.remove("is-drag-selecting");
     resetFlowchart();
+  });
+}
+
+if (loadDiagramButton && loadDiagramInput) {
+  loadDiagramButton.addEventListener("click", async () => {
+    if (!confirmDiscardCurrentDiagram()) {
+      return;
+    }
+
+    if (typeof window.showOpenFilePicker === "function") {
+      try {
+        const pickerOptions = await buildAlgoFlowImportPickerOptions();
+        const [fileHandle] = await window.showOpenFilePicker({
+          ...pickerOptions,
+          multiple: false,
+          excludeAcceptAllOption: true,
+        });
+        const selectedFile = await fileHandle.getFile();
+        const rawText = await readImportedFlowchartDocument(selectedFile);
+        await saveLastAlgoFlowPickerHandle(fileHandle).catch(() => {});
+        importFlowchartFromJsonText(rawText);
+        return;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+
+        const message = error instanceof Error ? error.message : "Impossibile importare il file selezionato.";
+        window.alert(message);
+        return;
+      }
+    }
+
+    loadDiagramInput.value = "";
+    loadDiagramInput.click();
+  });
+}
+
+if (loadDiagramInput) {
+  loadDiagramInput.addEventListener("change", async () => {
+    const [selectedFile] = Array.from(loadDiagramInput.files ?? []);
+
+    if (!selectedFile) {
+      return;
+    }
+
+    try {
+      const rawText = await readImportedFlowchartDocument(selectedFile);
+      importFlowchartFromJsonText(rawText);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Impossibile importare il file selezionato.";
+      window.alert(message);
+    } finally {
+      loadDiagramInput.value = "";
+    }
+  });
+}
+
+if (saveDiagramButton) {
+  saveDiagramButton.addEventListener("click", async () => {
+    await exportFlowchartToJsonFile();
+  });
+}
+
+if (exportPdfButton) {
+  exportPdfButton.addEventListener("click", async () => {
+    try {
+      await exportFlowchartToPdfFile();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Impossibile preparare l'esportazione PDF.";
+      window.alert(message);
+    }
   });
 }
 
@@ -3385,11 +4469,13 @@ document.addEventListener("keydown", (event) => {
     return;
   }
 
-  if (event.key === "Escape") {
-    if (!propertyDialogBackdrop.hidden) {
-      removeDraftNode();
-      closePropertyDialog();
-      closeInsertDialog();
+  const target = event.target;
+  const isEscapeKey = event.key === "Escape";
+
+  if (isEscapeKey) {
+    if (isProgramRunning && insertDialogBackdrop.hidden) {
+      event.preventDefault();
+      cancelExecution();
       return;
     }
 
@@ -3400,18 +4486,25 @@ document.addEventListener("keydown", (event) => {
     return;
   }
 
+  if (isTypingTarget(target)) {
+    return;
+  }
+
+  const normalizedKey = typeof event.key === "string" ? event.key.toLowerCase() : "";
+
+  if (!event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey && normalizedKey === "e") {
+    event.preventDefault();
+    startProgramExecution("run");
+    return;
+  }
+
+  if (!event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey && normalizedKey === "p") {
+    event.preventDefault();
+    startProgramExecution("step");
+    return;
+  }
+
   if ((event.key === "Delete" || event.key === "Backspace") && propertyDialogBackdrop.hidden && insertDialogBackdrop.hidden) {
-    const target = event.target;
-    const isTypingField =
-      target instanceof HTMLInputElement ||
-      target instanceof HTMLTextAreaElement ||
-      target instanceof HTMLSelectElement ||
-      (target instanceof HTMLElement && target.isContentEditable);
-
-    if (isTypingField) {
-      return;
-    }
-
     event.preventDefault();
     deleteSelectedNode();
   }
