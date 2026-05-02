@@ -4,3 +4,4 @@
 - implementare gli array
 - copia e incolla dei blocchi
 - lavorare alla versione mobile
+- migliorare la textbox per i commenti
