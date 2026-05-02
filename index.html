@@ -15,8 +15,7 @@
       <div class="topbar-group topbar-group-start">
         <button type="button" class="ghost-button" id="new-diagram-button">Nuovo</button>
         <button type="button" class="ghost-button" id="load-diagram-button">Carica</button>
-            <button type="button" class="ghost-button" id="save-diagram-button">Salva JSON</button>
-            <button type="button" class="ghost-button" id="export-pdf-button">Salva PDF</button>
+        <button type="button" class="ghost-button" id="save-diagram-button">Salva</button>
       </div>
       <div class="topbar-brand">
         <p class="eyebrow">Prototype</p>
@@ -206,14 +205,12 @@
               <div class="code-card">
                 <h3>Vista codice</h3>
                 <div class="language-tabs" role="tablist" aria-label="Selezione linguaggio">
-                  <button type="button" class="language-tab is-active" aria-selected="true">C</button>
-                  <button type="button" class="language-tab" aria-selected="false">C++</button>
-                  <button type="button" class="language-tab" aria-selected="false">Python</button>
+                  <button type="button" class="language-tab is-active" data-code-language="c" aria-selected="true">C</button>
+                  <button type="button" class="language-tab" data-code-language="cpp" aria-selected="false">C++</button>
+                  <button type="button" class="language-tab" data-code-language="python" aria-selected="false">Python</button>
                 </div>
               </div>
-              <pre class="code-preview"><code>Start
-  ...
-End</code></pre>
+              <pre class="code-preview"><code id="code-preview-content"></code></pre>
             </div>
           </section>
         </div>
@@ -272,7 +269,7 @@ End</code></pre>
     </main>
   </div>
 
-  <input type="file" id="load-diagram-input" accept=".algoflow.json,.json,.pdf,application/pdf" hidden>
+  <input type="file" id="load-diagram-input" accept=".algoflow.json,.json,.pdf,application/pdf,.fprg,application/xml,text/xml" hidden>
   <script src="app.js"></script>
 </body>
 </html>

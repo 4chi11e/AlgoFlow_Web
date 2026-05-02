@@ -1,5 +1,6 @@
 const mainTabs = document.querySelectorAll(".folder-tab");
 const mainViews = document.querySelectorAll(".main-view");
+const languageTabs = document.querySelectorAll(".language-tab");
 const workspace = document.querySelector(".workspace");
 const workspaceResizer = document.querySelector("#workspace-resizer");
 const sidebarContent = document.querySelector(".sidebar-content");
@@ -8,7 +9,6 @@ const variablesSection = document.querySelector(".variables-section");
 const newDiagramButton = document.querySelector("#new-diagram-button");
 const loadDiagramButton = document.querySelector("#load-diagram-button");
 const saveDiagramButton = document.querySelector("#save-diagram-button");
-const exportPdfButton = document.querySelector("#export-pdf-button");
 const loadDiagramInput = document.querySelector("#load-diagram-input");
 const runProgramButton = document.querySelector("#run-program-button");
 const stepProgramButton = document.querySelector("#step-program-button");
@@ -17,6 +17,7 @@ const showNodeTypeToggle = document.querySelector("#show-node-type-toggle");
 
 const diagramCanvas = document.querySelector("#diagram-canvas");
 const flowchartRoot = document.querySelector("#flowchart-root");
+const codePreviewContent = document.querySelector("#code-preview-content");
 const selectionBox = document.querySelector("#selection-box");
 const variablesBody = document.querySelector("#variables-body");
 const terminalStatus = document.querySelector("#terminal-status");
@@ -58,10 +59,14 @@ const forStepInput = document.querySelector("#for-step-input");
 const propertyForm = document.querySelector("#property-form");
 const STORAGE_KEY = "flowgorithm-web-diagram";
 const NODE_LABEL_PREFERENCE_KEY = "flowgorithm-web-show-node-type";
+const MAIN_VIEW_PREFERENCE_KEY = "algoflow-main-view";
+const CODE_LANGUAGE_PREFERENCE_KEY = "algoflow-code-language";
 const ALGOFLOW_FILE_FORMAT = "algoflow";
 const ALGOFLOW_FILE_VERSION = 1;
 const ALGOFLOW_FILE_EXTENSION = ".algoflow.json";
 const ALGOFLOW_PDF_EXTENSION = ".pdf";
+const FLOWGORITHM_FILE_EXTENSION = ".fprg";
+const FLOWGORITHM_FILE_VERSION = "2.6";
 const ALGOFLOW_APP_NAME = "AlgoFlow";
 const ALGOFLOW_FILE_PICKER_ID = "algoflow-diagrams";
 const ALGOFLOW_PICKER_DB_NAME = "algoflow-picker-db";
@@ -195,6 +200,7 @@ let pendingInputResolver = null;
 let isWorkspaceSplitManual = false;
 let isSidebarSplitManual = false;
 let pendingSidebarAutoSyncFrame = null;
+let selectedCodeLanguage = "c";
 
 const RUNTIME_UNDECLARED = Symbol("runtime-undeclared");
 const MAX_RUNTIME_OPERATIONS = 10000;
@@ -616,6 +622,34 @@ const buildAlgoFlowPickerOptions = async () => {
   return options;
 };
 
+const buildAlgoFlowSavePickerOptions = async () => {
+  const options = await buildAlgoFlowPickerOptions();
+
+  options.types = [
+    {
+      description: "AlgoFlow JSON",
+      accept: {
+        "application/json": [ALGOFLOW_FILE_EXTENSION, ".json"],
+      },
+    },
+    {
+      description: "Flowgorithm FPRG",
+      accept: {
+        "application/xml": [FLOWGORITHM_FILE_EXTENSION],
+        "text/xml": [FLOWGORITHM_FILE_EXTENSION],
+      },
+    },
+    {
+      description: "PDF con diagramma AlgoFlow",
+      accept: {
+        "application/pdf": [ALGOFLOW_PDF_EXTENSION],
+      },
+    },
+  ];
+
+  return options;
+};
+
 const buildAlgoFlowImportPickerOptions = async () => {
   const options = await buildAlgoFlowPickerOptions();
 
@@ -625,21 +659,8 @@ const buildAlgoFlowImportPickerOptions = async () => {
       accept: {
         "application/json": [ALGOFLOW_FILE_EXTENSION, ".json"],
         "application/pdf": [ALGOFLOW_PDF_EXTENSION],
-      },
-    },
-  ];
-
-  return options;
-};
-
-const buildAlgoFlowPdfPickerOptions = async () => {
-  const options = await buildAlgoFlowPickerOptions();
-
-  options.types = [
-    {
-      description: "PDF con diagramma AlgoFlow",
-      accept: {
-        "application/pdf": [ALGOFLOW_PDF_EXTENSION],
+        "application/xml": [FLOWGORITHM_FILE_EXTENSION],
+        "text/xml": [FLOWGORITHM_FILE_EXTENSION],
       },
     },
   ];
@@ -713,6 +734,15 @@ const isPdfDiagramFile = (file) => {
 
   const normalizedName = typeof file.name === "string" ? file.name.toLowerCase() : "";
   return file.type === "application/pdf" || normalizedName.endsWith(ALGOFLOW_PDF_EXTENSION);
+};
+
+const isFlowgorithmDiagramFile = (file) => {
+  if (!(file instanceof File)) {
+    return false;
+  }
+
+  const normalizedName = typeof file.name === "string" ? file.name.toLowerCase() : "";
+  return normalizedName.endsWith(FLOWGORITHM_FILE_EXTENSION) || file.type === "application/xml" || file.type === "text/xml";
 };
 
 const uint8ArrayToBase64 = (bytes) => {
@@ -835,12 +865,537 @@ const readImportedFlowchartDocument = async (file) => {
     throw new Error("Nessun file selezionato.");
   }
 
+  if (isFlowgorithmDiagramFile(file)) {
+    const xmlText = await file.text();
+    return JSON.stringify(importFlowgorithmXmlDocument(xmlText));
+  }
+
   if (!isPdfDiagramFile(file)) {
     return readFlowchartFile(file);
   }
 
   const pdfBytes = new Uint8Array(await file.arrayBuffer());
   return extractEmbeddedAlgoFlowJsonFromPdfBytes(pdfBytes);
+};
+
+const escapeXmlAttribute = (value) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+const getFlowgorithmSavedTimestamp = () => {
+  const now = new Date();
+  const datePart = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-");
+  let hours = now.getHours();
+  const minutes = String(now.getMinutes()).padStart(2, "0");
+  const seconds = String(now.getSeconds()).padStart(2, "0");
+  const meridiem = hours >= 12 ? "PM" : "AM";
+  hours = hours % 12 || 12;
+  return `${datePart} ${String(hours).padStart(2, "0")}:${minutes}:${seconds} ${meridiem}`;
+};
+
+const getFlowgorithmSuggestedFileName = () => getSuggestedDiagramFileName().replace(/\.algoflow\.json$/i, FLOWGORITHM_FILE_EXTENSION);
+
+const escapeFlowgorithmStringLiteral = (value) =>
+  String(value ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\r?\n/g, "\\n");
+
+const formatTemplateAsFlowgorithmOutputExpression = (template) => {
+  const parts = [];
+  const placeholderPattern = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
+  let lastIndex = 0;
+  let match = null;
+
+  while ((match = placeholderPattern.exec(String(template ?? ""))) !== null) {
+    const literalText = String(template ?? "").slice(lastIndex, match.index);
+
+    if (literalText) {
+      parts.push(`"${escapeFlowgorithmStringLiteral(literalText)}"`);
+    }
+
+    parts.push(match[1]);
+    lastIndex = match.index + match[0].length;
+  }
+
+  const trailingText = String(template ?? "").slice(lastIndex);
+
+  if (trailingText || parts.length === 0) {
+    parts.push(`"${escapeFlowgorithmStringLiteral(trailingText)}"`);
+  }
+
+  return parts.join(" & ");
+};
+
+const convertAssignmentToFlowgorithm = (node) => {
+  const parsedAssignment = parseAssignmentStatement(node.value);
+
+  if (!parsedAssignment) {
+    throw new Error(`Il nodo Assign ${node.id} non può essere esportato in Flowgorithm.`);
+  }
+
+  if (parsedAssignment.operator === "=") {
+    return parsedAssignment;
+  }
+
+  const operatorMap = {
+    "+=": "+",
+    "-=": "-",
+    "*=": "*",
+    "/=": "/",
+    "%=": "%",
+  };
+
+  const mappedOperator = operatorMap[parsedAssignment.operator];
+
+  return {
+    variableName: parsedAssignment.variableName,
+    operator: "=",
+    expression: `${parsedAssignment.variableName} ${mappedOperator} (${parsedAssignment.expression})`,
+  };
+};
+
+const exportNodesToFlowgorithmXml = (nodes, indentLevel = 5) => {
+  const indent = CODEGEN_INDENT.repeat(indentLevel);
+  const lines = [];
+
+  nodes.forEach((node) => {
+    switch (node.type) {
+      case "declare": {
+        const names = (node.declareConfig?.names ?? []).join(", ");
+        const dataType = node.declareConfig?.dataType ?? "Integer";
+        const isArray = Boolean(node.declareConfig?.isArray);
+
+        lines.push(
+          `${indent}<declare name="${escapeXmlAttribute(names)}" type="${escapeXmlAttribute(dataType)}" array="${isArray ? "True" : "False"}" size=""/>`
+        );
+        break;
+      }
+      case "assign": {
+        const assignment = convertAssignmentToFlowgorithm(node);
+        lines.push(
+          `${indent}<assign variable="${escapeXmlAttribute(assignment.variableName)}" expression="${escapeXmlAttribute(assignment.expression)}"/>`
+        );
+        break;
+      }
+      case "input":
+        lines.push(`${indent}<input variable="${escapeXmlAttribute(node.value.trim())}"/>`);
+        break;
+      case "output":
+        lines.push(
+          `${indent}<output expression="${escapeXmlAttribute(formatTemplateAsFlowgorithmOutputExpression(node.value))}" newline="True"/>`
+        );
+        break;
+      case "comment":
+        lines.push(`${indent}<comment text="${escapeXmlAttribute(node.value)}"/>`);
+        break;
+      case "call":
+        lines.push(`${indent}<call expression="${escapeXmlAttribute(node.value)}"/>`);
+        break;
+      case "if": {
+        lines.push(`${indent}<if expression="${escapeXmlAttribute(node.value)}">`);
+        lines.push(`${indent}${CODEGEN_INDENT}<then>`);
+        lines.push(...exportNodesToFlowgorithmXml(node.branches?.trueBranch ?? [], indentLevel + 2));
+        lines.push(`${indent}${CODEGEN_INDENT}</then>`);
+        lines.push(`${indent}${CODEGEN_INDENT}<else>`);
+        lines.push(...exportNodesToFlowgorithmXml(node.branches?.falseBranch ?? [], indentLevel + 2));
+        lines.push(`${indent}${CODEGEN_INDENT}</else>`);
+        lines.push(`${indent}</if>`);
+        break;
+      }
+      case "while":
+        lines.push(`${indent}<while expression="${escapeXmlAttribute(node.value)}">`);
+        lines.push(...exportNodesToFlowgorithmXml(node.branches?.body ?? [], indentLevel + 1));
+        lines.push(`${indent}</while>`);
+        break;
+      case "for": {
+        const config = node.forConfig ?? {};
+        lines.push(
+          `${indent}<for variable="${escapeXmlAttribute(config.variable ?? "")}" start="${escapeXmlAttribute(config.start ?? "")}" end="${escapeXmlAttribute(config.end ?? "")}" step="${escapeXmlAttribute(config.step ?? "1")}">`
+        );
+        lines.push(...exportNodesToFlowgorithmXml(node.branches?.body ?? [], indentLevel + 1));
+        lines.push(`${indent}</for>`);
+        break;
+      }
+      case "do":
+        lines.push(`${indent}<do expression="${escapeXmlAttribute(node.value)}">`);
+        lines.push(...exportNodesToFlowgorithmXml(node.branches?.body ?? [], indentLevel + 1));
+        lines.push(`${indent}</do>`);
+        break;
+      default:
+        throw new Error(`Il nodo di tipo "${node.type}" non può essere esportato in Flowgorithm.`);
+    }
+  });
+
+  return lines;
+};
+
+const buildFlowgorithmXmlDocument = () => {
+  const xmlLines = [
+    '<?xml version="1.0"?>',
+    `<flowgorithm fileversion="${FLOWGORITHM_FILE_VERSION}">`,
+    `${CODEGEN_INDENT}<attributes>`,
+    `${CODEGEN_INDENT.repeat(2)}<attribute name="name" value="${escapeXmlAttribute(ALGOFLOW_APP_NAME)}"/>`,
+    `${CODEGEN_INDENT.repeat(2)}<attribute name="authors" value="${escapeXmlAttribute(ALGOFLOW_APP_NAME)}"/>`,
+    `${CODEGEN_INDENT.repeat(2)}<attribute name="about" value="Exported from AlgoFlow"/>`,
+    `${CODEGEN_INDENT.repeat(2)}<attribute name="saved" value="${escapeXmlAttribute(getFlowgorithmSavedTimestamp())}"/>`,
+    `${CODEGEN_INDENT}</attributes>`,
+    `${CODEGEN_INDENT}<function name="Main" type="None" variable="">`,
+    `${CODEGEN_INDENT.repeat(2)}<parameters/>`,
+    `${CODEGEN_INDENT.repeat(2)}<body>`,
+    ...exportNodesToFlowgorithmXml(getPersistedFlowNodes()),
+    `${CODEGEN_INDENT.repeat(2)}</body>`,
+    `${CODEGEN_INDENT}</function>`,
+    `</flowgorithm>`,
+    "",
+  ];
+
+  return xmlLines.join("\n");
+};
+
+const tokenizeFlowgorithmOutputExpression = (expression) => {
+  const tokens = [];
+  let current = "";
+  let inString = false;
+  let escapeNext = false;
+
+  for (let index = 0; index < expression.length; index += 1) {
+    const character = expression[index];
+
+    if (escapeNext) {
+      current += character;
+      escapeNext = false;
+      continue;
+    }
+
+    if (character === "\\") {
+      current += character;
+      escapeNext = true;
+      continue;
+    }
+
+    if (character === "\"") {
+      current += character;
+      inString = !inString;
+      continue;
+    }
+
+    if (!inString && character === "&") {
+      if (current.trim()) {
+        tokens.push(current.trim());
+      }
+      current = "";
+      continue;
+    }
+
+    current += character;
+  }
+
+  if (inString) {
+    throw new Error("Espressione Output Flowgorithm non valida: stringa non chiusa.");
+  }
+
+  if (current.trim()) {
+    tokens.push(current.trim());
+  }
+
+  return tokens;
+};
+
+const decodeFlowgorithmStringLiteral = (token) => {
+  if (!/^".*"$/.test(token)) {
+    return null;
+  }
+
+  return token
+    .slice(1, -1)
+    .replace(/\\n/g, "\n")
+    .replace(/\\"/g, "\"")
+    .replace(/\\\\/g, "\\");
+};
+
+const convertFlowgorithmOutputExpressionToTemplate = (expression) => {
+  const normalizedExpression = String(expression ?? "").trim();
+
+  if (!normalizedExpression) {
+    return "";
+  }
+
+  const tokens = tokenizeFlowgorithmOutputExpression(normalizedExpression);
+
+  if (tokens.length === 0) {
+    return "";
+  }
+
+  return tokens.map((token) => {
+    const literalValue = decodeFlowgorithmStringLiteral(token);
+
+    if (literalValue != null) {
+      return literalValue;
+    }
+
+    if (/^[A-Za-z][A-Za-z0-9_]*$/.test(token)) {
+      return `{${token}}`;
+    }
+
+    throw new Error(`Espressione Output Flowgorithm non supportata: ${expression}`);
+  }).join("");
+};
+
+const getDirectChildElement = (parentElement, tagName) =>
+  Array.from(parentElement.children).find((child) => child.tagName === tagName) ?? null;
+
+const importFlowgorithmSequence = (parentElement) =>
+  Array.from(parentElement.children).map((element) => {
+    switch (element.tagName) {
+      case "declare":
+        return {
+          type: "declare",
+          value: "",
+          declareConfig: {
+            names: String(element.getAttribute("name") ?? "")
+              .split(",")
+              .map((name) => name.trim())
+              .filter(Boolean),
+            dataType: element.getAttribute("type") || "Integer",
+            isArray: (element.getAttribute("array") || "False") === "True",
+          },
+        };
+      case "assign":
+        return {
+          type: "assign",
+          value: `${element.getAttribute("variable") || ""} = ${element.getAttribute("expression") || ""}`.trim(),
+        };
+      case "input":
+        return {
+          type: "input",
+          value: element.getAttribute("variable") || "",
+        };
+      case "output":
+        return {
+          type: "output",
+          value: convertFlowgorithmOutputExpressionToTemplate(element.getAttribute("expression") || ""),
+        };
+      case "comment":
+        return {
+          type: "comment",
+          value: element.getAttribute("text") || "",
+        };
+      case "call":
+        return {
+          type: "call",
+          value: element.getAttribute("expression") || "",
+        };
+      case "if":
+        return {
+          type: "if",
+          value: element.getAttribute("expression") || "",
+          branches: {
+            trueBranch: getDirectChildElement(element, "then") ? importFlowgorithmSequence(getDirectChildElement(element, "then")) : [],
+            falseBranch: getDirectChildElement(element, "else") ? importFlowgorithmSequence(getDirectChildElement(element, "else")) : [],
+          },
+        };
+      case "while":
+        return {
+          type: "while",
+          value: element.getAttribute("expression") || "",
+          branches: {
+            body: importFlowgorithmSequence(element),
+          },
+        };
+      case "for":
+        return {
+          type: "for",
+          value: "",
+          forConfig: {
+            variable: element.getAttribute("variable") || "",
+            start: element.getAttribute("start") || "",
+            end: element.getAttribute("end") || "",
+            step: element.getAttribute("step") || "1",
+          },
+          branches: {
+            body: importFlowgorithmSequence(element),
+          },
+        };
+      case "do":
+        return {
+          type: "do",
+          value: element.getAttribute("expression") || "",
+          branches: {
+            body: importFlowgorithmSequence(element),
+          },
+        };
+      default:
+        return null;
+    }
+  }).filter(Boolean);
+
+const assignImportedNodeIds = (nodes) => {
+  let nextImportedNodeId = 1;
+
+  const assignIds = (nodeList) => {
+    nodeList.forEach((node) => {
+      node.id = nextImportedNodeId;
+      nextImportedNodeId += 1;
+
+      if (node.type === "declare" && !node.declareConfig) {
+        node.declareConfig = { names: [], dataType: "Integer", isArray: false };
+      }
+
+      if (node.type === "for" && !node.forConfig) {
+        node.forConfig = { variable: "", start: "", end: "", step: "1" };
+      }
+
+      if (node.branches) {
+        Object.values(node.branches).forEach((branchNodes) => assignIds(branchNodes));
+      }
+    });
+  };
+
+  assignIds(nodes);
+  return nodes;
+};
+
+const importFlowgorithmXmlDocument = (xmlText) => {
+  const parser = new DOMParser();
+  const xmlDocument = parser.parseFromString(xmlText, "application/xml");
+
+  if (xmlDocument.querySelector("parsererror")) {
+    throw new Error("Il file Flowgorithm selezionato non contiene XML valido.");
+  }
+
+  const root = xmlDocument.documentElement;
+
+  if (!root || root.tagName !== "flowgorithm") {
+    throw new Error("Il file selezionato non è un documento Flowgorithm valido.");
+  }
+
+  const mainFunction = root.querySelector('function[name="Main"] > body');
+
+  if (!mainFunction) {
+    throw new Error("Il file Flowgorithm non contiene la funzione Main.");
+  }
+
+  const importedNodes = assignImportedNodeIds(importFlowgorithmSequence(mainFunction));
+
+  return {
+    format: ALGOFLOW_FILE_FORMAT,
+    version: ALGOFLOW_FILE_VERSION,
+    app: {
+      name: ALGOFLOW_APP_NAME,
+    },
+    preferences: {
+      showNodeTypeInLabel,
+    },
+    diagram: {
+      nodes: importedNodes,
+    },
+  };
+};
+
+const getSaveFormatFromFileName = (fileName) => {
+  const normalizedName = String(fileName ?? "").toLowerCase();
+
+  if (normalizedName.endsWith(ALGOFLOW_PDF_EXTENSION)) {
+    return "pdf";
+  }
+
+  if (normalizedName.endsWith(FLOWGORITHM_FILE_EXTENSION)) {
+    return "fprg";
+  }
+
+  return "json";
+};
+
+const getSaveFormatFromHandle = (fileHandle, types = []) => {
+  if (fileHandle?.name) {
+    return getSaveFormatFromFileName(fileHandle.name);
+  }
+
+  const firstExtension = types
+    .flatMap((typeEntry) => Object.values(typeEntry.accept ?? {}))
+    .flat()
+    .find(Boolean);
+
+  return getSaveFormatFromFileName(firstExtension ?? ALGOFLOW_FILE_EXTENSION);
+};
+
+const downloadBlobAsFile = (blob, fileName) => {
+  const objectUrl = URL.createObjectURL(blob);
+  const downloadLink = document.createElement("a");
+
+  downloadLink.href = objectUrl;
+  downloadLink.download = fileName;
+  downloadLink.click();
+
+  window.setTimeout(() => {
+    URL.revokeObjectURL(objectUrl);
+  }, 0);
+};
+
+const exportFlowchartWithPicker = async () => {
+  if (typeof window.showSaveFilePicker === "function") {
+    const pickerOptions = await buildAlgoFlowSavePickerOptions();
+    const fileHandle = await window.showSaveFilePicker({
+      ...pickerOptions,
+      suggestedName: getSuggestedDiagramFileName(),
+    });
+    const selectedFormat = getSaveFormatFromHandle(fileHandle, pickerOptions.types);
+    const writable = await fileHandle.createWritable();
+
+    try {
+      if (selectedFormat === "pdf") {
+        await writable.write(await buildAlgoFlowPdfBytes());
+      } else if (selectedFormat === "fprg") {
+        await writable.write(buildFlowgorithmXmlDocument());
+      } else {
+        await writable.write(JSON.stringify(buildAlgoFlowFileDocument(), null, 2));
+      }
+    } finally {
+      await writable.close();
+    }
+
+    await saveLastAlgoFlowPickerHandle(fileHandle).catch(() => {});
+    return;
+  }
+
+  const selectedFormat = window.prompt(
+    "Scegli il formato di salvataggio: json, fprg oppure pdf",
+    "json"
+  );
+
+  if (!selectedFormat) {
+    return;
+  }
+
+  const normalizedFormat = selectedFormat.trim().toLowerCase();
+
+  if (normalizedFormat === "pdf") {
+    downloadBlobAsFile(new Blob([await buildAlgoFlowPdfBytes()], { type: "application/pdf" }), getSuggestedPdfFileName());
+    return;
+  }
+
+  if (normalizedFormat === "fprg") {
+    downloadBlobAsFile(new Blob([buildFlowgorithmXmlDocument()], { type: "application/xml" }), getFlowgorithmSuggestedFileName());
+    return;
+  }
+
+  if (normalizedFormat === "json") {
+    downloadBlobAsFile(
+      new Blob([JSON.stringify(buildAlgoFlowFileDocument(), null, 2)], { type: "application/json" }),
+      getSuggestedDiagramFileName()
+    );
+    return;
+  }
+
+  throw new Error("Formato di salvataggio non supportato. Usa json, fprg oppure pdf.");
 };
 
 const isTypingTarget = (target) =>
@@ -884,42 +1439,6 @@ const importFlowchartFromJsonText = (rawText) => {
   renderFlowchart();
 };
 
-const exportFlowchartToJsonFile = async () => {
-  const documentData = buildAlgoFlowFileDocument();
-  const serializedDocument = JSON.stringify(documentData, null, 2);
-  const suggestedFileName = getSuggestedDiagramFileName();
-
-  if (typeof window.showSaveFilePicker === "function") {
-    try {
-      const pickerOptions = await buildAlgoFlowPickerOptions();
-      const fileHandle = await window.showSaveFilePicker({
-        ...pickerOptions,
-        suggestedName: suggestedFileName,
-      });
-      const writable = await fileHandle.createWritable();
-      await writable.write(serializedDocument);
-      await writable.close();
-      await saveLastAlgoFlowPickerHandle(fileHandle).catch(() => {});
-      return;
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        return;
-      }
-    }
-  }
-
-  const blob = new Blob([serializedDocument], { type: "application/json" });
-  const objectUrl = URL.createObjectURL(blob);
-  const downloadLink = document.createElement("a");
-
-  downloadLink.href = objectUrl;
-  downloadLink.download = suggestedFileName;
-  downloadLink.click();
-
-  window.setTimeout(() => {
-    URL.revokeObjectURL(objectUrl);
-  }, 0);
-};
 
 const buildPrintableDiagramSvgMarkup = () => {
   const diagramSvg = flowchartRoot?.querySelector(".diagram-svg");
@@ -1390,42 +1909,6 @@ const buildAlgoFlowPdfBytes = async () => {
   ]);
 };
 
-const exportFlowchartToPdfFile = async () => {
-  const pdfBytes = await buildAlgoFlowPdfBytes();
-  const suggestedFileName = getSuggestedPdfFileName();
-
-  if (typeof window.showSaveFilePicker === "function") {
-    try {
-      const pickerOptions = await buildAlgoFlowPdfPickerOptions();
-      const fileHandle = await window.showSaveFilePicker({
-        ...pickerOptions,
-        suggestedName: suggestedFileName,
-      });
-      const writable = await fileHandle.createWritable();
-      await writable.write(pdfBytes);
-      await writable.close();
-      await saveLastAlgoFlowPickerHandle(fileHandle).catch(() => {});
-      return;
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        return;
-      }
-    }
-  }
-
-  const blob = new Blob([pdfBytes], { type: "application/pdf" });
-  const objectUrl = URL.createObjectURL(blob);
-  const downloadLink = document.createElement("a");
-
-  downloadLink.href = objectUrl;
-  downloadLink.download = suggestedFileName;
-  downloadLink.click();
-
-  window.setTimeout(() => {
-    URL.revokeObjectURL(objectUrl);
-  }, 0);
-};
-
 const saveFlowchartState = () => {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(getPersistedFlowNodes()));
 };
@@ -1467,6 +1950,70 @@ const saveNodeLabelPreference = () => {
   window.localStorage.setItem(NODE_LABEL_PREFERENCE_KEY, String(showNodeTypeInLabel));
 };
 
+const setActiveMainView = (targetId) => {
+  if (!targetId) {
+    return;
+  }
+
+  let hasMatchingView = false;
+
+  mainViews.forEach((view) => {
+    const isTarget = view.id === targetId;
+    view.classList.toggle("is-active", isTarget);
+    view.hidden = !isTarget;
+
+    if (isTarget) {
+      hasMatchingView = true;
+    }
+  });
+
+  if (!hasMatchingView) {
+    return;
+  }
+
+  mainTabs.forEach((item) => {
+    const isTarget = item.dataset.mainTarget === targetId;
+    item.classList.toggle("is-active", isTarget);
+    item.setAttribute("aria-selected", String(isTarget));
+  });
+};
+
+const loadMainViewPreference = () => {
+  try {
+    const storedValue = window.localStorage.getItem(MAIN_VIEW_PREFERENCE_KEY);
+    return storedValue || "diagram-view";
+  } catch {
+    return "diagram-view";
+  }
+};
+
+const saveMainViewPreference = (targetId) => {
+  try {
+    window.localStorage.setItem(MAIN_VIEW_PREFERENCE_KEY, targetId);
+  } catch {
+    // Ignore storage failures.
+  }
+};
+
+const loadCodeLanguagePreference = () => {
+  try {
+    const storedValue = window.localStorage.getItem(CODE_LANGUAGE_PREFERENCE_KEY);
+    if (storedValue && ["c", "cpp", "python"].includes(storedValue)) {
+      selectedCodeLanguage = storedValue;
+    }
+  } catch {
+    selectedCodeLanguage = "c";
+  }
+};
+
+const saveCodeLanguagePreference = () => {
+  try {
+    window.localStorage.setItem(CODE_LANGUAGE_PREFERENCE_KEY, selectedCodeLanguage);
+  } catch {
+    // Ignore storage failures.
+  }
+};
+
 const getNodeLabelPrefix = (node) => {
   const definition = getNodeDefinition(node.type);
   return showNodeTypeInLabel && definition ? `${definition.label}: ` : "";
@@ -1480,17 +2027,31 @@ const getNodeLabelPrefixMarkup = (node) => {
 mainTabs.forEach((tab) => {
   tab.addEventListener("click", () => {
     const targetId = tab.dataset.mainTarget;
+    setActiveMainView(targetId);
+    saveMainViewPreference(targetId);
+  });
+});
 
-    mainTabs.forEach((item) => {
-      item.classList.toggle("is-active", item === tab);
-      item.setAttribute("aria-selected", String(item === tab));
-    });
+const syncCodeLanguageTabs = () => {
+  languageTabs.forEach((tab) => {
+    const isActive = tab.dataset.codeLanguage === selectedCodeLanguage;
+    tab.classList.toggle("is-active", isActive);
+    tab.setAttribute("aria-selected", String(isActive));
+  });
+};
 
-    mainViews.forEach((view) => {
-      const isTarget = view.id === targetId;
-      view.classList.toggle("is-active", isTarget);
-      view.hidden = !isTarget;
-    });
+languageTabs.forEach((tab) => {
+  tab.addEventListener("click", () => {
+    const nextLanguage = tab.dataset.codeLanguage;
+
+    if (!nextLanguage || nextLanguage === selectedCodeLanguage) {
+      return;
+    }
+
+    selectedCodeLanguage = nextLanguage;
+    saveCodeLanguagePreference();
+    syncCodeLanguageTabs();
+    renderCodePreview();
   });
 });
 
@@ -3564,6 +4125,435 @@ const getSvgCanvasMetrics = () => {
   };
 };
 
+const CODEGEN_INDENT = "    ";
+
+const indentCodeLine = (level, line) => `${CODEGEN_INDENT.repeat(level)}${line}`;
+
+const collectCodegenVariableMeta = () => {
+  const variables = new Map();
+
+  traverseNodes(flowNodes, (node) => {
+    if (node.type !== "declare" || !node.declareConfig?.names?.length) {
+      return;
+    }
+
+    node.declareConfig.names.forEach((name) => {
+      if (!variables.has(name)) {
+        variables.set(name, {
+          name,
+          dataType: node.declareConfig.dataType,
+          isArray: Boolean(node.declareConfig.isArray),
+        });
+      }
+    });
+  });
+
+  return variables;
+};
+
+const escapeCStringContent = (text) =>
+  String(text ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\r?\n/g, "\\n")
+    .replace(/%/g, "%%");
+
+const getPythonFStringLiteral = (template) => {
+  const parts = [];
+  const placeholderPattern = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
+  let lastIndex = 0;
+  let match = null;
+
+  while ((match = placeholderPattern.exec(String(template ?? ""))) !== null) {
+    const [token, variableName] = match;
+    const literalText = String(template ?? "").slice(lastIndex, match.index);
+    parts.push(literalText.replace(/\{/g, "{{").replace(/\}/g, "}}"));
+    parts.push(token);
+    lastIndex = match.index + token.length;
+  }
+
+  parts.push(String(template ?? "").slice(lastIndex).replace(/\{/g, "{{").replace(/\}/g, "}}"));
+  return `f${JSON.stringify(parts.join(""))}`;
+};
+
+const normalizeExpressionForLanguage = (expression, language) => {
+  const rawExpression = String(expression ?? "").trim();
+
+  if (!rawExpression) {
+    return "";
+  }
+
+  if (language === "python") {
+    return rawExpression
+      .replace(/\btrue\b/gi, "True")
+      .replace(/\bfalse\b/gi, "False")
+      .replace(/\bmod\b/gi, "%")
+      .replace(/&&/g, " and ")
+      .replace(/\|\|/g, " or ")
+      .replace(/\bnot\b/gi, "not")
+      .replace(/\band\b/gi, "and")
+      .replace(/\bor\b/gi, "or")
+      .replace(/!\s*(?!=)/g, "not ");
+  }
+
+  return normalizeExpressionSyntax(rawExpression);
+};
+
+const getCodegenDeclarationLine = (meta, language) => {
+  if (meta.isArray) {
+    const commentPrefix = language === "python" ? "#" : "//";
+    return `${commentPrefix} TODO: array ${meta.name} (${meta.dataType}[]) non ancora supportato`;
+  }
+
+  switch (language) {
+    case "python":
+      return `${meta.name} = None`;
+    case "cpp": {
+      const cppType = {
+        Integer: "int",
+        Real: "double",
+        Boolean: "bool",
+        String: "string",
+      }[meta.dataType] ?? "auto";
+      return `${cppType} ${meta.name};`;
+    }
+    case "c": {
+      const cType = {
+        Integer: "int",
+        Real: "double",
+        Boolean: "int",
+        String: "char",
+      }[meta.dataType] ?? "int";
+
+      if (meta.dataType === "String") {
+        return `${cType} ${meta.name}[256];`;
+      }
+
+      return `${cType} ${meta.name};`;
+    }
+    default:
+      return meta.name;
+  }
+};
+
+const getGroupedDeclarationLines = (node, language, variables) => {
+  const declaredNames = node.declareConfig?.names ?? [];
+
+  if (declaredNames.length === 0) {
+    return [];
+  }
+
+  if (language === "python") {
+    return [];
+  }
+
+  const firstMeta = variables.get(declaredNames[0]) ?? {
+    name: declaredNames[0],
+    dataType: node.declareConfig?.dataType ?? "Integer",
+    isArray: Boolean(node.declareConfig?.isArray),
+  };
+
+  if (firstMeta.isArray) {
+    return declaredNames.map((name) => {
+      const meta = variables.get(name) ?? {
+        name,
+        dataType: node.declareConfig?.dataType ?? "Integer",
+        isArray: Boolean(node.declareConfig?.isArray),
+      };
+      return getCodegenDeclarationLine(meta, language);
+    });
+  }
+
+  if (language === "cpp") {
+    const cppType = {
+      Integer: "int",
+      Real: "double",
+      Boolean: "bool",
+      String: "string",
+    }[firstMeta.dataType] ?? "auto";
+    return [`${cppType} ${declaredNames.join(", ")};`];
+  }
+
+  if (firstMeta.dataType === "String") {
+    return declaredNames.map((name) => `char ${name}[256];`);
+  }
+
+  const cType = {
+    Integer: "int",
+    Real: "double",
+    Boolean: "int",
+    String: "char",
+  }[firstMeta.dataType] ?? "int";
+  return [`${cType} ${declaredNames.join(", ")};`];
+};
+
+const getCodegenInputLine = (variableName, language, variables) => {
+  const meta = variables.get(variableName) ?? { dataType: "String", isArray: false };
+
+  if (language === "python") {
+    switch (meta.dataType) {
+      case "Integer":
+        return `${variableName} = int(input())`;
+      case "Real":
+        return `${variableName} = float(input())`;
+      case "Boolean":
+        return `${variableName} = input().strip().lower() in ("true", "1", "vero", "yes")`;
+      default:
+        return `${variableName} = input()`;
+    }
+  }
+
+  if (language === "cpp") {
+    return `cin >> ${variableName};`;
+  }
+
+  switch (meta.dataType) {
+    case "Integer":
+      return `scanf("%d", &${variableName});`;
+    case "Real":
+      return `scanf("%lf", &${variableName});`;
+    case "Boolean":
+      return `scanf("%d", &${variableName});`;
+    default:
+      return `scanf("%255s", ${variableName});`;
+  }
+};
+
+const getCOutputPlaceholder = (variableName, variables) => {
+  const meta = variables.get(variableName) ?? { dataType: "String", isArray: false };
+
+  switch (meta.dataType) {
+    case "Integer":
+      return { format: "%d", argument: variableName };
+    case "Real":
+      return { format: "%g", argument: variableName };
+    case "Boolean":
+      return { format: "%s", argument: `(${variableName} ? "true" : "false")` };
+    default:
+      return { format: "%s", argument: variableName };
+  }
+};
+
+const getCodegenOutputLine = (template, language, variables) => {
+  const rawTemplate = String(template ?? "");
+  const placeholderPattern = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
+
+  if (language === "python") {
+    return `print(${getPythonFStringLiteral(rawTemplate)})`;
+  }
+
+  const segments = [];
+  let lastIndex = 0;
+  let match = null;
+
+  while ((match = placeholderPattern.exec(rawTemplate)) !== null) {
+    const literalText = rawTemplate.slice(lastIndex, match.index);
+
+    if (literalText) {
+      segments.push({ type: "text", value: literalText });
+    }
+
+    segments.push({ type: "variable", value: match[1] });
+    lastIndex = match.index + match[0].length;
+  }
+
+  const trailingText = rawTemplate.slice(lastIndex);
+
+  if (trailingText || segments.length === 0) {
+    segments.push({ type: "text", value: trailingText });
+  }
+
+  if (language === "cpp") {
+    const cppParts = segments.map((segment) =>
+      segment.type === "text" ? JSON.stringify(segment.value) : segment.value
+    );
+    return `cout << ${cppParts.join(" << ")} << endl;`;
+  }
+
+  const formatParts = [];
+  const argumentsList = [];
+
+  segments.forEach((segment) => {
+    if (segment.type === "text") {
+      formatParts.push(escapeCStringContent(segment.value));
+      return;
+    }
+
+    const placeholder = getCOutputPlaceholder(segment.value, variables);
+    formatParts.push(placeholder.format);
+    argumentsList.push(placeholder.argument);
+  });
+
+  const formatLiteral = `"${formatParts.join("")}\\n"`;
+  return argumentsList.length > 0
+    ? `printf(${formatLiteral}, ${argumentsList.join(", ")});`
+    : `printf(${formatLiteral});`;
+};
+
+const getCodegenCommentLine = (text, language) => {
+  const prefix = language === "python" ? "#" : "//";
+  return `${prefix} ${String(text ?? "").trim()}`.trimEnd();
+};
+
+const getCodegenCallLine = (text, language) => {
+  const prefix = language === "python" ? "#" : "//";
+  const callText = String(text ?? "").trim() || "call";
+  return `${prefix} TODO: ${callText}`;
+};
+
+const generateCodeLinesForNodes = (nodes, language, indentLevel, variables) => {
+  const lines = [];
+
+  nodes.forEach((node) => {
+    switch (node.type) {
+      case "declare": {
+        const declarationLines = getGroupedDeclarationLines(node, language, variables);
+        declarationLines.forEach((line) => {
+          lines.push(indentCodeLine(indentLevel, line));
+        });
+        break;
+      }
+      case "assign":
+        lines.push(indentCodeLine(indentLevel, String(node.value ?? "").trim() + (language === "python" ? "" : ";")));
+        break;
+      case "input":
+        lines.push(indentCodeLine(indentLevel, getCodegenInputLine(String(node.value ?? "").trim(), language, variables)));
+        break;
+      case "output":
+        lines.push(indentCodeLine(indentLevel, getCodegenOutputLine(node.value, language, variables)));
+        break;
+      case "comment":
+        lines.push(indentCodeLine(indentLevel, getCodegenCommentLine(node.value, language)));
+        break;
+      case "call":
+        lines.push(indentCodeLine(indentLevel, getCodegenCallLine(node.value, language)));
+        break;
+      case "if": {
+        const condition = normalizeExpressionForLanguage(node.value, language) || "false";
+        const trueBranch = node.branches?.trueBranch ?? [];
+        const falseBranch = node.branches?.falseBranch ?? [];
+
+        if (language === "python") {
+          lines.push(indentCodeLine(indentLevel, `if ${condition}:`));
+          if (trueBranch.length > 0) {
+            lines.push(...generateCodeLinesForNodes(trueBranch, language, indentLevel + 1, variables));
+          } else {
+            lines.push(indentCodeLine(indentLevel + 1, "pass"));
+          }
+          if (falseBranch.length > 0) {
+            lines.push(indentCodeLine(indentLevel, "else:"));
+            lines.push(...generateCodeLinesForNodes(falseBranch, language, indentLevel + 1, variables));
+          }
+          break;
+        }
+
+        lines.push(indentCodeLine(indentLevel, `if (${condition}) {`));
+        lines.push(...generateCodeLinesForNodes(trueBranch, language, indentLevel + 1, variables));
+        lines.push(indentCodeLine(indentLevel, "}"));
+
+        if (falseBranch.length > 0) {
+          lines[lines.length - 1] = indentCodeLine(indentLevel, "} else {");
+          lines.push(...generateCodeLinesForNodes(falseBranch, language, indentLevel + 1, variables));
+          lines.push(indentCodeLine(indentLevel, "}"));
+        }
+        break;
+      }
+      case "while": {
+        const condition = normalizeExpressionForLanguage(node.value, language) || "false";
+        const body = node.branches?.body ?? [];
+        if (language === "python") {
+          lines.push(indentCodeLine(indentLevel, `while ${condition}:`));
+          lines.push(...(body.length > 0 ? generateCodeLinesForNodes(body, language, indentLevel + 1, variables) : [indentCodeLine(indentLevel + 1, "pass")]));
+          break;
+        }
+
+        lines.push(indentCodeLine(indentLevel, `while (${condition}) {`));
+        lines.push(...generateCodeLinesForNodes(body, language, indentLevel + 1, variables));
+        lines.push(indentCodeLine(indentLevel, "}"));
+        break;
+      }
+      case "for": {
+        const config = node.forConfig ?? {};
+        const variableName = String(config.variable ?? "").trim() || "i";
+        const start = normalizeExpressionForLanguage(config.start, language) || "0";
+        const end = normalizeExpressionForLanguage(config.end, language) || "0";
+        const step = normalizeExpressionForLanguage(config.step, language) || "1";
+        const body = node.branches?.body ?? [];
+
+        if (language === "python") {
+          lines.push(indentCodeLine(indentLevel, `for ${variableName} in range(${start}, ${end}, ${step}):`));
+          lines.push(...(body.length > 0 ? generateCodeLinesForNodes(body, language, indentLevel + 1, variables) : [indentCodeLine(indentLevel + 1, "pass")]));
+          break;
+        }
+
+        lines.push(indentCodeLine(
+          indentLevel,
+          `for (${variableName} = ${start}; (${step}) > 0 ? ${variableName} < ${end} : ${variableName} > ${end}; ${variableName} += ${step}) {`
+        ));
+        lines.push(...generateCodeLinesForNodes(body, language, indentLevel + 1, variables));
+        lines.push(indentCodeLine(indentLevel, "}"));
+        break;
+      }
+      case "do": {
+        const condition = normalizeExpressionForLanguage(node.value, language) || "false";
+        const body = node.branches?.body ?? [];
+
+        if (language === "python") {
+          lines.push(indentCodeLine(indentLevel, "while True:"));
+          if (body.length > 0) {
+            lines.push(...generateCodeLinesForNodes(body, language, indentLevel + 1, variables));
+          }
+          lines.push(indentCodeLine(indentLevel + 1, `if not (${condition}):`));
+          lines.push(indentCodeLine(indentLevel + 2, "break"));
+          break;
+        }
+
+        lines.push(indentCodeLine(indentLevel, "do {"));
+        lines.push(...generateCodeLinesForNodes(body, language, indentLevel + 1, variables));
+        lines.push(indentCodeLine(indentLevel, `} while (${condition});`));
+        break;
+      }
+      default:
+        lines.push(indentCodeLine(indentLevel, getCodegenCommentLine(`Nodo ${node.type} non supportato`, language)));
+        break;
+    }
+  });
+
+  return lines;
+};
+
+const buildProgramCode = (language) => {
+  const variables = collectCodegenVariableMeta();
+  const bodyLines = generateCodeLinesForNodes(flowNodes, language, language === "python" ? 0 : 1, variables);
+
+  if (language === "python") {
+    return bodyLines.length > 0 ? bodyLines.join("\n") : "# Diagramma vuoto";
+  }
+
+  const includes = language === "cpp"
+    ? ["#include <iostream>", "#include <string>", "", "using namespace std;", ""]
+    : ["#include <stdio.h>", ""];
+
+  const mainHeader = language === "cpp" ? "int main() {" : "int main(void) {";
+  const mainFooter = language === "cpp" ? `${indentCodeLine(1, "return 0;")}\n}` : `${indentCodeLine(1, "return 0;")}\n}`;
+  const effectiveBody = bodyLines.length > 0 ? bodyLines : [indentCodeLine(1, language === "cpp" ? "// Diagramma vuoto" : "// Diagramma vuoto")];
+
+  return [
+    ...includes,
+    mainHeader,
+    ...effectiveBody,
+    mainFooter,
+  ].join("\n");
+};
+
+const renderCodePreview = () => {
+  if (!codePreviewContent) {
+    return;
+  }
+
+  codePreviewContent.textContent = buildProgramCode(selectedCodeLanguage);
+};
+
 const renderSvgTopLevelNode = (node, y, path, centerX) => renderSvgNodeBlockAt(node, y, path, centerX);
 
 const renderFlowchart = () => {
@@ -3615,6 +4605,7 @@ const renderFlowchart = () => {
 
   applyDiagramZoom();
 
+  renderCodePreview();
   refreshExecutionUi();
 };
 
@@ -4416,16 +5407,14 @@ if (loadDiagramInput) {
 
 if (saveDiagramButton) {
   saveDiagramButton.addEventListener("click", async () => {
-    await exportFlowchartToJsonFile();
-  });
-}
-
-if (exportPdfButton) {
-  exportPdfButton.addEventListener("click", async () => {
     try {
-      await exportFlowchartToPdfFile();
+      await exportFlowchartWithPicker();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Impossibile preparare l'esportazione PDF.";
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
+
+      const message = error instanceof Error ? error.message : "Impossibile completare il salvataggio.";
       window.alert(message);
     }
   });
@@ -4512,5 +5501,8 @@ document.addEventListener("keydown", (event) => {
 
 loadNodeLabelPreference();
 loadFlowchartState();
+loadCodeLanguagePreference();
+syncCodeLanguageTabs();
+setActiveMainView(loadMainViewPreference());
 renderFlowchart();
 syncExecutionControls();
