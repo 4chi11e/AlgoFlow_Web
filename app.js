@@ -13,6 +13,7 @@ const loadDiagramInput = document.querySelector("#load-diagram-input");
 const runProgramButton = document.querySelector("#run-program-button");
 const stepProgramButton = document.querySelector("#step-program-button");
 const stopProgramButton = document.querySelector("#stop-program-button");
+const themeToggleButton = document.querySelector("#theme-toggle-button");
 const showNodeTypeToggle = document.querySelector("#show-node-type-toggle");
 
 const diagramCanvas = document.querySelector("#diagram-canvas");
@@ -61,6 +62,7 @@ const STORAGE_KEY = "flowgorithm-web-diagram";
 const NODE_LABEL_PREFERENCE_KEY = "flowgorithm-web-show-node-type";
 const MAIN_VIEW_PREFERENCE_KEY = "algoflow-main-view";
 const CODE_LANGUAGE_PREFERENCE_KEY = "algoflow-code-language";
+const THEME_PREFERENCE_KEY = "algoflow-theme";
 const ALGOFLOW_FILE_FORMAT = "algoflow";
 const ALGOFLOW_FILE_VERSION = 1;
 const ALGOFLOW_FILE_EXTENSION = ".algoflow.json";
@@ -201,6 +203,7 @@ let isWorkspaceSplitManual = false;
 let isSidebarSplitManual = false;
 let pendingSidebarAutoSyncFrame = null;
 let selectedCodeLanguage = "c";
+let currentTheme = "light";
 
 const RUNTIME_UNDECLARED = Symbol("runtime-undeclared");
 const MAX_RUNTIME_OPERATIONS = 10000;
@@ -263,11 +266,19 @@ const syncPropertyInputSize = () => {
 
   if (propertyInput.dataset.autosize !== "true") {
     propertyInput.style.height = "";
+    propertyInput.style.overflowY = "";
     return;
   }
 
   propertyInput.style.height = "auto";
-  propertyInput.style.height = `${propertyInput.scrollHeight}px`;
+  const computedStyle = window.getComputedStyle(propertyInput);
+  const maxHeight = Number.parseFloat(computedStyle.maxHeight);
+  const targetHeight = Number.isFinite(maxHeight)
+    ? Math.min(propertyInput.scrollHeight, maxHeight)
+    : propertyInput.scrollHeight;
+
+  propertyInput.style.height = `${targetHeight}px`;
+  propertyInput.style.overflowY = propertyInput.scrollHeight > targetHeight ? "auto" : "hidden";
 };
 
 const getStructuredBranchKeys = (type) => {
@@ -1345,7 +1356,7 @@ const exportFlowchartWithPicker = async () => {
     const pickerOptions = await buildAlgoFlowSavePickerOptions();
     const fileHandle = await window.showSaveFilePicker({
       ...pickerOptions,
-      suggestedName: getSuggestedDiagramFileName(),
+      suggestedName: getSuggestedPdfFileName(),
     });
     const selectedFormat = getSaveFormatFromHandle(fileHandle, pickerOptions.types);
     const writable = await fileHandle.createWritable();
@@ -1368,7 +1379,7 @@ const exportFlowchartWithPicker = async () => {
 
   const selectedFormat = window.prompt(
     "Scegli il formato di salvataggio: json, fprg oppure pdf",
-    "json"
+    "pdf"
   );
 
   if (!selectedFormat) {
@@ -1729,63 +1740,65 @@ const buildPrintableDiagramImageDataUrlForPdf = async () => {
 };
 
 const buildPrintableDiagramCanvasForPdf = async () => {
-  const diagramSvg = flowchartRoot?.querySelector(".diagram-svg");
+  return runWithTemporaryTheme("light", async () => {
+    const diagramSvg = flowchartRoot?.querySelector(".diagram-svg");
 
-  if (!(diagramSvg instanceof SVGElement)) {
-    throw new Error("Non c'è alcun diagramma da esportare in PDF.");
-  }
-
-  const printableSvg = diagramSvg.cloneNode(true);
-  const viewBox = printableSvg.viewBox.baseVal;
-
-  if (!viewBox || !viewBox.width || !viewBox.height) {
-    throw new Error("Il diagramma non ha dimensioni esportabili.");
-  }
-
-  printableSvg.removeAttribute("id");
-  printableSvg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-  printableSvg.setAttribute("xmlns:xhtml", "http://www.w3.org/1999/xhtml");
-  printableSvg.setAttribute("width", String(viewBox.width));
-  printableSvg.setAttribute("height", String(viewBox.height));
-  inlineSvgComputedStylesForPdf(diagramSvg, printableSvg);
-  simplifySvgLabelsForPdf(printableSvg);
-
-  const styleNode = document.createElementNS("http://www.w3.org/2000/svg", "style");
-  styleNode.textContent = collectDocumentStylesForPdfSvg();
-  printableSvg.insertBefore(styleNode, printableSvg.firstChild);
-
-  const serializedSvg = new XMLSerializer().serializeToString(printableSvg);
-  const svgBlob = new Blob([serializedSvg], { type: "image/svg+xml;charset=utf-8" });
-  const svgUrl = URL.createObjectURL(svgBlob);
-
-  try {
-    const image = await new Promise((resolve, reject) => {
-      const nextImage = new Image();
-
-      nextImage.onload = () => resolve(nextImage);
-      nextImage.onerror = () => reject(new Error("Impossibile renderizzare il diagramma per il PDF."));
-      nextImage.src = svgUrl;
-    });
-
-    const scale = 2;
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(viewBox.width * scale);
-    canvas.height = Math.round(viewBox.height * scale);
-
-    const context = canvas.getContext("2d");
-
-    if (!context) {
-      throw new Error("Impossibile preparare il canvas per l'esportazione PDF.");
+    if (!(diagramSvg instanceof SVGElement)) {
+      throw new Error("Non c'è alcun diagramma da esportare in PDF.");
     }
 
-    context.fillStyle = "#ffffff";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const printableSvg = diagramSvg.cloneNode(true);
+    const viewBox = printableSvg.viewBox.baseVal;
 
-    return canvas;
-  } finally {
-    URL.revokeObjectURL(svgUrl);
-  }
+    if (!viewBox || !viewBox.width || !viewBox.height) {
+      throw new Error("Il diagramma non ha dimensioni esportabili.");
+    }
+
+    printableSvg.removeAttribute("id");
+    printableSvg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    printableSvg.setAttribute("xmlns:xhtml", "http://www.w3.org/1999/xhtml");
+    printableSvg.setAttribute("width", String(viewBox.width));
+    printableSvg.setAttribute("height", String(viewBox.height));
+    inlineSvgComputedStylesForPdf(diagramSvg, printableSvg);
+    simplifySvgLabelsForPdf(printableSvg);
+
+    const styleNode = document.createElementNS("http://www.w3.org/2000/svg", "style");
+    styleNode.textContent = collectDocumentStylesForPdfSvg();
+    printableSvg.insertBefore(styleNode, printableSvg.firstChild);
+
+    const serializedSvg = new XMLSerializer().serializeToString(printableSvg);
+    const svgBlob = new Blob([serializedSvg], { type: "image/svg+xml;charset=utf-8" });
+    const svgUrl = URL.createObjectURL(svgBlob);
+
+    try {
+      const image = await new Promise((resolve, reject) => {
+        const nextImage = new Image();
+
+        nextImage.onload = () => resolve(nextImage);
+        nextImage.onerror = () => reject(new Error("Impossibile renderizzare il diagramma per il PDF."));
+        nextImage.src = svgUrl;
+      });
+
+      const scale = 2;
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(viewBox.width * scale);
+      canvas.height = Math.round(viewBox.height * scale);
+
+      const context = canvas.getContext("2d");
+
+      if (!context) {
+        throw new Error("Impossibile preparare il canvas per l'esportazione PDF.");
+      }
+
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+      return canvas;
+    } finally {
+      URL.revokeObjectURL(svgUrl);
+    }
+  });
 };
 
 const buildEmbeddedAlgoFlowPdfPayloadComment = (serializedDocument) => {
@@ -2014,6 +2027,56 @@ const saveCodeLanguagePreference = () => {
   }
 };
 
+const syncThemeToggleButton = () => {
+  if (!themeToggleButton) {
+    return;
+  }
+
+  const isDark = currentTheme === "dark";
+  themeToggleButton.textContent = isDark ? "Tema chiaro" : "Tema scuro";
+  themeToggleButton.title = isDark ? "Passa al tema chiaro" : "Passa al tema scuro";
+};
+
+const applyTheme = (theme) => {
+  currentTheme = theme === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = currentTheme;
+  syncThemeToggleButton();
+};
+
+const loadThemePreference = () => {
+  try {
+    const storedValue = window.localStorage.getItem(THEME_PREFERENCE_KEY);
+    applyTheme(storedValue === "dark" ? "dark" : "light");
+  } catch {
+    applyTheme("light");
+  }
+};
+
+const saveThemePreference = () => {
+  try {
+    window.localStorage.setItem(THEME_PREFERENCE_KEY, currentTheme);
+  } catch {
+    // Ignore storage failures.
+  }
+};
+
+const runWithTemporaryTheme = async (temporaryTheme, task) => {
+  const previousTheme = currentTheme;
+
+  if (previousTheme !== temporaryTheme) {
+    applyTheme(temporaryTheme);
+    await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  }
+
+  try {
+    return await task();
+  } finally {
+    if (previousTheme !== temporaryTheme) {
+      applyTheme(previousTheme);
+    }
+  }
+};
+
 const getNodeLabelPrefix = (node) => {
   const definition = getNodeDefinition(node.type);
   return showNodeTypeInLabel && definition ? `${definition.label}: ` : "";
@@ -2021,7 +2084,25 @@ const getNodeLabelPrefix = (node) => {
 
 const getNodeLabelPrefixMarkup = (node) => {
   const prefix = getNodeLabelPrefix(node);
-  return prefix ? `${escapeHtml(prefix.slice(0, -1))}&nbsp;` : "";
+  return prefix ? escapeHtml(prefix.slice(0, -1)) : "";
+};
+
+const getNodeBodyText = (node) => {
+  if (node.type === "declare" && node.declareConfig) {
+    const typeLabel = node.declareConfig.isArray ? `${node.declareConfig.dataType}[]` : node.declareConfig.dataType;
+    return `${typeLabel} ${node.declareConfig.names.join(", ")}`.trim();
+  }
+
+  if (node.type === "for" && node.forConfig) {
+    const { variable, start, end, step } = node.forConfig;
+    return `${variable} = ${start} to < ${end} step ${step}`.replace(/\s+/g, " ").trim();
+  }
+
+  if (typeof node.value === "string" && node.value.trim()) {
+    return node.value.trim();
+  }
+
+  return "";
 };
 
 mainTabs.forEach((tab) => {
@@ -3286,34 +3367,24 @@ const renderVariablesPanel = () => {
 
 const getNodeDisplayText = (node) => {
   const prefix = getNodeLabelPrefix(node);
+  const bodyText = getNodeBodyText(node);
 
-  if (node.type === "declare" && node.declareConfig) {
-    const typeLabel = node.declareConfig.isArray ? `${node.declareConfig.dataType}[]` : node.declareConfig.dataType;
-    return `${prefix}${typeLabel} ${node.declareConfig.names.join(", ")}`.trim();
+  if (!bodyText) {
+    return prefix.slice(0, -1);
   }
 
-  if (node.type === "for" && node.forConfig) {
-    const { variable, start, end, step } = node.forConfig;
-    return `${prefix}${variable} = ${start} to < ${end} step ${step}`.replace(/\s+/g, " ").trim();
-  }
-
-  if (node.value && node.value.trim()) {
-    if (node.type === "comment") {
-      return showNodeTypeInLabel ? `${prefix}${node.value.trim()}` : `// ${node.value.trim()}`;
-    }
-
-    return `${prefix}${node.value.trim()}`.trim();
-  }
-
-  return "";
+  return `${prefix}${bodyText}`.trim();
 };
 
 const getNodeMarkup = (node) => {
   const displayText = getNodeDisplayText(node);
+  const bodyText = getNodeBodyText(node);
   const declaredNames = getDeclaredVariableNameSet();
   const prefixMarkup = getNodeLabelPrefixMarkup(node);
+  const wrapNodeLabelContent = (content) => `<span class="node-label-content">${content}</span>`;
+  const inlinePrefixMarkup = prefixMarkup ? `${prefixMarkup}&nbsp;` : "";
 
-  if (!displayText) {
+  if (!displayText && !bodyText) {
     return '<span aria-hidden="true">&nbsp;</span>';
   }
 
@@ -3326,7 +3397,7 @@ const getNodeMarkup = (node) => {
         ? escapeHtml(variableName)
         : `<span class="invalid-variable">${escapeHtml(variableName)}</span>`;
 
-      return `${prefixMarkup}${variableMarkup} ${escapeHtml(operator)} ${highlightUndeclaredVariablesInText(expression, declaredNames)}`;
+      return wrapNodeLabelContent(`${inlinePrefixMarkup}${variableMarkup} ${escapeHtml(operator)} ${highlightUndeclaredVariablesInText(expression, declaredNames)}`);
     }
   }
 
@@ -3334,25 +3405,29 @@ const getNodeMarkup = (node) => {
     const variableName = node.value.trim();
 
     if (variableName && !declaredNames.has(variableName)) {
-      return `${prefixMarkup}<span class="invalid-variable">${escapeHtml(variableName)}</span>`;
+      return wrapNodeLabelContent(`${inlinePrefixMarkup}<span class="invalid-variable">${escapeHtml(variableName)}</span>`);
     }
 
-    return `${prefixMarkup}${escapeHtml(variableName)}`;
+    return wrapNodeLabelContent(`${inlinePrefixMarkup}${escapeHtml(variableName)}`);
   }
 
   if (node.type === "output" && node.value) {
-    return `${prefixMarkup}${highlightOutputTemplateText(node.value, declaredNames)}`;
+    return wrapNodeLabelContent(`${inlinePrefixMarkup}${highlightOutputTemplateText(node.value, declaredNames)}`);
+  }
+
+  if (node.type === "comment" && bodyText) {
+    return wrapNodeLabelContent(`${inlinePrefixMarkup}${escapeHtml(bodyText)}`);
   }
 
   if ((node.type === "if" || node.type === "while" || node.type === "do") && node.value) {
-    return `${prefixMarkup}${highlightUndeclaredVariablesInText(node.value, declaredNames)}`;
+    return wrapNodeLabelContent(`${inlinePrefixMarkup}${highlightUndeclaredVariablesInText(node.value, declaredNames)}`);
   }
 
   if (node.type === "for" && node.value) {
-    return `${prefixMarkup}${highlightUndeclaredVariablesInText(node.value, declaredNames)}`;
+    return wrapNodeLabelContent(`${inlinePrefixMarkup}${highlightUndeclaredVariablesInText(node.value, declaredNames)}`);
   }
 
-  return escapeHtml(displayText);
+  return wrapNodeLabelContent(escapeHtml(displayText));
 };
 
 const encodeInsertTarget = (path, index) => encodeURIComponent(JSON.stringify({ path, index }));
@@ -3536,15 +3611,35 @@ const SVG_DO_EXIT_GAP = 20;
 const SVG_NODE_TEXT_CHAR_WIDTH = 8.6;
 const SVG_NODE_LINE_HEIGHT = 22;
 const SVG_NODE_HORIZONTAL_PADDING = 34;
-const SVG_NODE_VERTICAL_PADDING = 24;
+const SVG_NODE_VERTICAL_PADDING = 18;
 
 const SVG_NODE_SIZE_PRESETS = {
   if: { minWidth: 220, maxWidth: 400, minHeight: 108 },
   while: { minWidth: 210, maxWidth: 380, minHeight: 74 },
   for: { minWidth: 210, maxWidth: 380, minHeight: 74 },
   do: { minWidth: 210, maxWidth: 380, minHeight: 74 },
-  comment: { minWidth: 190, maxWidth: 360, minHeight: 62 },
+  comment: { minWidth: 220, maxWidth: 520, minHeight: 44 },
   default: { minWidth: 180, maxWidth: 360, minHeight: 58 },
+};
+
+let svgNodeMeasurementRoot = null;
+
+const getSvgNodeVerticalInset = (type) => {
+  switch (type) {
+    case "if":
+      return 24;
+    case "while":
+    case "for":
+    case "do":
+      return 20;
+    case "input":
+    case "output":
+      return 16;
+    case "comment":
+      return 8;
+    default:
+      return 12;
+  }
 };
 
 const getSvgLabelInsets = (type, width, height) => {
@@ -3583,16 +3678,53 @@ const getSvgLabelInsets = (type, width, height) => {
   }
 };
 
+const getSvgNodeMeasurementRoot = () => {
+  if (svgNodeMeasurementRoot?.isConnected) {
+    return svgNodeMeasurementRoot;
+  }
+
+  const root = document.createElement("div");
+  root.setAttribute("aria-hidden", "true");
+  root.style.position = "absolute";
+  root.style.left = "-99999px";
+  root.style.top = "0";
+  root.style.visibility = "hidden";
+  root.style.pointerEvents = "none";
+  root.style.contain = "layout style size";
+
+  document.body.append(root);
+  svgNodeMeasurementRoot = root;
+  return root;
+};
+
+const measureSvgNodeLabelHeight = (type, width, markup) => {
+  const measurementRoot = getSvgNodeMeasurementRoot();
+  const wrapper = document.createElement("div");
+  wrapper.className = `svg-node-label svg-node-label-${type}`;
+  wrapper.style.width = `${Math.max(width, 24)}px`;
+  wrapper.style.height = "auto";
+
+  const inner = document.createElement("div");
+  inner.className = "svg-node-label-inner";
+  inner.innerHTML = markup;
+  wrapper.append(inner);
+  measurementRoot.append(wrapper);
+
+  const measuredHeight = Math.ceil(wrapper.getBoundingClientRect().height);
+  wrapper.remove();
+  return Math.max(measuredHeight, 24);
+};
+
 const estimateWrappedLineCount = (text, charsPerLine) => {
   if (!text) {
     return 1;
   }
 
-  const paragraphs = text.split(/\n+/);
+  const paragraphs = text.split("\n");
   let lineCount = 0;
 
   paragraphs.forEach((paragraph) => {
-    const words = paragraph.trim().split(/\s+/).filter(Boolean);
+    const words = paragraph.split(/\s+/).filter(Boolean);
 
     if (words.length === 0) {
       lineCount += 1;
@@ -3646,18 +3778,24 @@ const getSvgNodeSize = (nodeOrType) => {
     typeof nodeOrType === "string"
       ? getNodeDefinition(type)?.label ?? ""
       : (getNodeDisplayText(nodeOrType) || getNodeDefinition(type)?.label || "");
-  const normalizedText = displayText.replace(/\s+/g, " ").trim();
+  const measurementText = displayText;
+  const normalizedText = measurementText.replace(/[ \t]+/g, " ").trim();
+  const estimatedLongestLineLength = Math.max(
+    ...measurementText.split("\n").map((line) => line.trim().length),
+    1
+  );
   const estimatedTextWidth = Math.max(
     preset.minWidth,
-    Math.ceil(normalizedText.length * SVG_NODE_TEXT_CHAR_WIDTH + SVG_NODE_HORIZONTAL_PADDING)
+    Math.ceil(estimatedLongestLineLength * SVG_NODE_TEXT_CHAR_WIDTH + SVG_NODE_HORIZONTAL_PADDING)
   );
   const width = Math.min(preset.maxWidth, estimatedTextWidth);
-  const charsPerLine = Math.max(
-    10,
-    Math.floor((width - SVG_NODE_HORIZONTAL_PADDING) / SVG_NODE_TEXT_CHAR_WIDTH)
-  );
-  const lineCount = estimateWrappedLineCount(normalizedText, charsPerLine);
-  const contentHeight = lineCount * SVG_NODE_LINE_HEIGHT + SVG_NODE_VERTICAL_PADDING;
+  const labelBox = getSvgLabelInsets(type, width, preset.minHeight);
+  const labelMarkup =
+    typeof nodeOrType === "string"
+      ? `<span class="node-label-content">${escapeHtml(displayText)}</span>`
+      : getNodeMarkup(nodeOrType);
+  const measuredContentHeight = measureSvgNodeLabelHeight(type, labelBox.width, labelMarkup);
+  const contentHeight = measuredContentHeight + getSvgNodeVerticalInset(type);
 
   return {
     width,
@@ -3670,6 +3808,10 @@ const getAdaptiveConnectorHeight = (nodeOrType) => {
   const preset = SVG_NODE_SIZE_PRESETS[type] ?? SVG_NODE_SIZE_PRESETS.default;
   const { height } = getSvgNodeSize(nodeOrType);
   const extraHeight = Math.max(0, height - preset.minHeight);
+
+  if (type === "comment") {
+    return SVG_CONNECTOR_HEIGHT + Math.ceil(extraHeight * 0.12);
+  }
 
   return SVG_CONNECTOR_HEIGHT + Math.ceil(extraHeight * 0.45);
 };
@@ -4392,7 +4534,19 @@ const getCodegenOutputLine = (template, language, variables) => {
 
 const getCodegenCommentLine = (text, language) => {
   const prefix = language === "python" ? "#" : "//";
-  return `${prefix} ${String(text ?? "").trim()}`.trimEnd();
+  const rawText = String(text ?? "").trim();
+
+  if (!rawText) {
+    return prefix;
+  }
+
+  return rawText
+    .split("\n")
+    .map((line) => {
+      const trimmedLine = line.trim();
+      return trimmedLine ? `${prefix} ${trimmedLine}` : prefix;
+    })
+    .join("\n");
 };
 
 const getCodegenCallLine = (text, language) => {
@@ -4422,9 +4576,14 @@ const generateCodeLinesForNodes = (nodes, language, indentLevel, variables) => {
       case "output":
         lines.push(indentCodeLine(indentLevel, getCodegenOutputLine(node.value, language, variables)));
         break;
-      case "comment":
-        lines.push(indentCodeLine(indentLevel, getCodegenCommentLine(node.value, language)));
+      case "comment": {
+        const commentLines = getCodegenCommentLine(node.value, language).split("\n");
+        commentLines.forEach((line) => {
+          lines.push(indentCodeLine(indentLevel, line));
+        });
+        lines.push("");
         break;
+      }
       case "call":
         lines.push(indentCodeLine(indentLevel, getCodegenCallLine(node.value, language)));
         break;
@@ -4661,15 +4820,14 @@ const openPropertyDialog = (nodeId) => {
   const isDeclare = node.type === "declare";
   const isAssign = node.type === "assign";
   const isFor = node.type === "for";
-  const isOutput = node.type === "output";
+  const isLongText = node.type === "output" || node.type === "comment";
 
   genericPropertyField.hidden = isDeclare || isFor;
-  genericPropertyField.classList.toggle("is-output", isOutput);
-  propertyInput.dataset.autosize = String(isOutput);
+  genericPropertyField.classList.toggle("is-output", isLongText);
+  propertyInput.dataset.autosize = String(isLongText);
   declareFields.hidden = !isDeclare;
   forFields.hidden = !isFor;
   mountAssignSuggestions();
-  syncPropertyInputSize();
 
   if (isAssign) {
     renderAssignSuggestions(propertyInput.value);
@@ -4713,6 +4871,8 @@ const openPropertyDialog = (nodeId) => {
   document.body.style.overflow = "hidden";
 
   requestAnimationFrame(() => {
+    syncPropertyInputSize();
+
     if (isDeclare) {
       declareNameInput.focus();
       declareNameInput.select();
@@ -5325,6 +5485,16 @@ if (propertyDialogBackdrop) {
     }
 
     if (event.key === "Enter") {
+      const isLongTextField =
+        event.target === propertyInput &&
+        propertyInput?.dataset.autosize === "true" &&
+        !event.ctrlKey &&
+        !event.metaKey;
+
+      if (isLongTextField) {
+        return;
+      }
+
       event.preventDefault();
       finalizeNode();
     }
@@ -5453,6 +5623,13 @@ if (showNodeTypeToggle) {
   });
 }
 
+if (themeToggleButton) {
+  themeToggleButton.addEventListener("click", () => {
+    applyTheme(currentTheme === "dark" ? "light" : "dark");
+    saveThemePreference();
+  });
+}
+
 document.addEventListener("keydown", (event) => {
   if (!propertyDialogBackdrop.hidden) {
     return;
@@ -5499,6 +5676,7 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+loadThemePreference();
 loadNodeLabelPreference();
 loadFlowchartState();
 loadCodeLanguagePreference();
