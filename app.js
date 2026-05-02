@@ -1,14 +1,26 @@
 const mainTabs = document.querySelectorAll(".folder-tab");
 const mainViews = document.querySelectorAll(".main-view");
+const workspace = document.querySelector(".workspace");
+const workspaceResizer = document.querySelector("#workspace-resizer");
 const sidebarContent = document.querySelector(".sidebar-content");
 const sidebarResizer = document.querySelector("#sidebar-resizer");
+const variablesSection = document.querySelector(".variables-section");
 const newDiagramButton = document.querySelector("#new-diagram-button");
+const runProgramButton = document.querySelector("#run-program-button");
+const stepProgramButton = document.querySelector("#step-program-button");
+const stopProgramButton = document.querySelector("#stop-program-button");
 const showNodeTypeToggle = document.querySelector("#show-node-type-toggle");
 
 const diagramCanvas = document.querySelector("#diagram-canvas");
 const flowchartRoot = document.querySelector("#flowchart-root");
 const selectionBox = document.querySelector("#selection-box");
 const variablesBody = document.querySelector("#variables-body");
+const terminalStatus = document.querySelector("#terminal-status");
+const consoleOutput = document.querySelector("#console-output");
+const consoleInputForm = document.querySelector("#console-input-form");
+const consoleInputLabel = document.querySelector("#console-input-label");
+const consoleInputField = document.querySelector("#console-input-field");
+const consoleInputButton = document.querySelector("#console-input-button");
 const insertDialogBackdrop = document.querySelector("#insert-dialog-backdrop");
 const insertDialogClose = document.querySelector("#insert-dialog-close");
 const insertNodeButtons = document.querySelectorAll("[data-node-type]");
@@ -26,9 +38,12 @@ const propertyFieldLabel = document.querySelector("#property-field-label");
 const propertyInput = document.querySelector("#property-input");
 const assignSuggestions = document.querySelector("#assign-suggestions");
 const propertyError = document.querySelector("#property-error");
+const propertyErrorText = document.querySelector("#property-error-text");
+const propertyErrorClose = document.querySelector("#property-error-close");
 const genericPropertyField = document.querySelector("#generic-property-field");
 const declareFields = document.querySelector("#declare-fields");
 const declareNameInput = document.querySelector("#declare-name-input");
+const declareArrayOption = document.querySelector("#declare-array-option");
 const declareArrayInput = document.querySelector("#declare-array-input");
 const declareTypeInputs = document.querySelectorAll('input[name="declare-type"]');
 const forFields = document.querySelector("#for-fields");
@@ -39,6 +54,7 @@ const forStepInput = document.querySelector("#for-step-input");
 const propertyForm = document.querySelector("#property-form");
 const STORAGE_KEY = "flowgorithm-web-diagram";
 const NODE_LABEL_PREFERENCE_KEY = "flowgorithm-web-show-node-type";
+const NOT_YET_IMPLEMENTED_MESSAGE = "Questa funzione al momento non è utilizzabile perché non è ancora stata sviluppata.";
 
 const nodeDefinitions = {
   input: {
@@ -71,7 +87,7 @@ const nodeDefinitions = {
     dialogTitle: "Assign Properties",
     description: "Assegna un valore a una variabile esistente.",
     fieldLabel: "Inserisci l'assegnazione:",
-    placeholder: "variabile = espressione",
+    placeholder: "variabile = espressione oppure variabile += espressione",
   },
   if: {
     label: "If",
@@ -106,9 +122,9 @@ const nodeDefinitions = {
     placeholder: "i = 0 to 10",
   },
   do: {
-    label: "Do",
+    label: "Do-While",
     shapeClass: "flow-node-do",
-    dialogTitle: "Do Properties",
+    dialogTitle: "Do-While Properties",
     description: "Esegue il blocco almeno una volta prima di valutare la condizione.",
     fieldLabel: "Inserisci la condizione del ciclo:",
     placeholder: "condizione",
@@ -157,6 +173,17 @@ let nodeClickTimer = null;
 let diagramZoom = 1;
 let panDrag = null;
 let showNodeTypeInLabel = false;
+let executionMode = null;
+let runtimeState = null;
+let pendingStepResolver = null;
+let pendingInputResolver = null;
+let isWorkspaceSplitManual = false;
+let isSidebarSplitManual = false;
+let pendingSidebarAutoSyncFrame = null;
+
+const RUNTIME_UNDECLARED = Symbol("runtime-undeclared");
+const MAX_RUNTIME_OPERATIONS = 10000;
+const SUPPORTED_ASSIGNMENT_OPERATORS = new Set(["=", "+=", "-=", "*=", "/=", "%="]);
 
 const MIN_DIAGRAM_ZOOM = 0.18;
 const MAX_DIAGRAM_ZOOM = 2.8;
@@ -501,26 +528,115 @@ mainTabs.forEach((tab) => {
   });
 });
 
-if (sidebarContent && sidebarResizer) {
-  const minTop = 180;
-  const minBottom = 160;
+const SIDEBAR_MIN_TOP = 180;
+const SIDEBAR_MIN_BOTTOM = 160;
+const WORKSPACE_MIN_MAIN = 560;
+const WORKSPACE_MIN_SIDEBAR = 320;
 
-  const updateSidebarSplit = (pointerClientY) => {
-    const bounds = sidebarContent.getBoundingClientRect();
-    const handleHeight = sidebarResizer.getBoundingClientRect().height || 16;
-    const maxTop = bounds.height - minBottom - handleHeight;
-    const nextTop = Math.min(Math.max(pointerClientY - bounds.top, minTop), maxTop);
+const getSidebarSplitMetrics = () => {
+  if (!sidebarContent || !sidebarResizer) {
+    return null;
+  }
 
-    sidebarContent.style.setProperty("--sidebar-top-size", `${nextTop}px`);
+  const bounds = sidebarContent.getBoundingClientRect();
+  const handleHeight = sidebarResizer.getBoundingClientRect().height || 16;
+  const maxTop = Math.max(SIDEBAR_MIN_TOP, bounds.height - SIDEBAR_MIN_BOTTOM - handleHeight);
+
+  return {
+    bounds,
+    handleHeight,
+    maxTop,
   };
+};
 
+const setSidebarSplitTop = (nextTop) => {
+  const metrics = getSidebarSplitMetrics();
+
+  if (!metrics || !sidebarContent) {
+    return;
+  }
+
+  const clampedTop = Math.min(Math.max(nextTop, SIDEBAR_MIN_TOP), metrics.maxTop);
+  sidebarContent.style.setProperty("--sidebar-top-size", `${Math.round(clampedTop)}px`);
+};
+
+const updateSidebarSplitFromPointer = (pointerClientY) => {
+  const metrics = getSidebarSplitMetrics();
+
+  if (!metrics) {
+    return;
+  }
+
+  setSidebarSplitTop(pointerClientY - metrics.bounds.top);
+};
+
+const syncSidebarSplitToContent = () => {
+  if (isSidebarSplitManual || !variablesSection) {
+    return;
+  }
+
+  setSidebarSplitTop(variablesSection.scrollHeight);
+};
+
+const scheduleSidebarAutoSync = () => {
+  if (isSidebarSplitManual || pendingSidebarAutoSyncFrame != null) {
+    return;
+  }
+
+  pendingSidebarAutoSyncFrame = requestAnimationFrame(() => {
+    pendingSidebarAutoSyncFrame = null;
+    syncSidebarSplitToContent();
+  });
+};
+
+const getWorkspaceSplitMetrics = () => {
+  if (!workspace || !workspaceResizer) {
+    return null;
+  }
+
+  const bounds = workspace.getBoundingClientRect();
+  const handleWidth = workspaceResizer.getBoundingClientRect().width || 16;
+  const maxSidebar = Math.max(WORKSPACE_MIN_SIDEBAR, bounds.width - WORKSPACE_MIN_MAIN - handleWidth);
+
+  return {
+    bounds,
+    handleWidth,
+    maxSidebar,
+  };
+};
+
+const setWorkspaceSidebarWidth = (nextSidebarWidth) => {
+  const metrics = getWorkspaceSplitMetrics();
+
+  if (!metrics || !workspace) {
+    return;
+  }
+
+  const clampedWidth = Math.min(Math.max(nextSidebarWidth, WORKSPACE_MIN_SIDEBAR), metrics.maxSidebar);
+  workspace.style.setProperty("--workspace-sidebar-size", `${Math.round(clampedWidth)}px`);
+};
+
+const updateWorkspaceSplitFromPointer = (pointerClientX) => {
+  const metrics = getWorkspaceSplitMetrics();
+
+  if (!metrics) {
+    return;
+  }
+
+  const sidebarWidth = metrics.bounds.right - pointerClientX - metrics.handleWidth / 2;
+  setWorkspaceSidebarWidth(sidebarWidth);
+};
+
+if (sidebarContent && sidebarResizer) {
   sidebarResizer.addEventListener("pointerdown", (event) => {
     event.preventDefault();
+    isSidebarSplitManual = true;
     sidebarResizer.setPointerCapture(event.pointerId);
     sidebarResizer.classList.add("is-dragging");
+    updateSidebarSplitFromPointer(event.clientY);
 
     const onPointerMove = (moveEvent) => {
-      updateSidebarSplit(moveEvent.clientY);
+      updateSidebarSplitFromPointer(moveEvent.clientY);
     };
 
     const onPointerUp = (upEvent) => {
@@ -534,6 +650,51 @@ if (sidebarContent && sidebarResizer) {
     sidebarResizer.addEventListener("pointermove", onPointerMove);
     sidebarResizer.addEventListener("pointerup", onPointerUp);
     sidebarResizer.addEventListener("pointercancel", onPointerUp);
+  });
+
+  window.addEventListener("resize", () => {
+    if (isSidebarSplitManual) {
+      const currentTop = Number.parseFloat(getComputedStyle(sidebarContent).getPropertyValue("--sidebar-top-size"));
+      setSidebarSplitTop(Number.isFinite(currentTop) ? currentTop : SIDEBAR_MIN_TOP);
+      return;
+    }
+
+    scheduleSidebarAutoSync();
+  });
+}
+
+if (workspace && workspaceResizer) {
+  workspaceResizer.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    isWorkspaceSplitManual = true;
+    workspaceResizer.setPointerCapture(event.pointerId);
+    workspaceResizer.classList.add("is-dragging");
+    updateWorkspaceSplitFromPointer(event.clientX);
+
+    const onPointerMove = (moveEvent) => {
+      updateWorkspaceSplitFromPointer(moveEvent.clientX);
+    };
+
+    const onPointerUp = (upEvent) => {
+      workspaceResizer.releasePointerCapture(upEvent.pointerId);
+      workspaceResizer.classList.remove("is-dragging");
+      workspaceResizer.removeEventListener("pointermove", onPointerMove);
+      workspaceResizer.removeEventListener("pointerup", onPointerUp);
+      workspaceResizer.removeEventListener("pointercancel", onPointerUp);
+    };
+
+    workspaceResizer.addEventListener("pointermove", onPointerMove);
+    workspaceResizer.addEventListener("pointerup", onPointerUp);
+    workspaceResizer.addEventListener("pointercancel", onPointerUp);
+  });
+
+  window.addEventListener("resize", () => {
+    if (!isWorkspaceSplitManual) {
+      return;
+    }
+
+    const currentWidth = Number.parseFloat(getComputedStyle(workspace).getPropertyValue("--workspace-sidebar-size"));
+    setWorkspaceSidebarWidth(Number.isFinite(currentWidth) ? currentWidth : WORKSPACE_MIN_SIDEBAR);
   });
 }
 
@@ -606,7 +767,10 @@ const hidePropertyError = () => {
   }
 
   propertyError.hidden = true;
-  propertyError.textContent = "";
+
+  if (propertyErrorText) {
+    propertyErrorText.textContent = "";
+  }
 };
 
 const showPropertyError = (message) => {
@@ -615,7 +779,10 @@ const showPropertyError = (message) => {
   }
 
   propertyError.hidden = false;
-  propertyError.textContent = message;
+
+  if (propertyErrorText) {
+    propertyErrorText.textContent = message;
+  }
 };
 
 const validateDeclareName = (rawName, currentNodeId) => {
@@ -712,6 +879,26 @@ const highlightOutputTemplateText = (text, declaredNames) => {
 
   parts.push(escapeHtml(text.slice(lastIndex)));
   return parts.join("");
+};
+
+const parseAssignmentStatement = (text) => {
+  const match = String(text ?? "").match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*(=|\+=|-=|\*=|\/=|%=)\s*(.+)$/);
+
+  if (!match) {
+    return null;
+  }
+
+  const [, variableName, operator, expression] = match;
+
+  if (!SUPPORTED_ASSIGNMENT_OPERATORS.has(operator)) {
+    return null;
+  }
+
+  return {
+    variableName,
+    operator,
+    expression,
+  };
 };
 
 const isEditingAssignNode = () => {
@@ -832,11 +1019,7 @@ const renderAssignSuggestions = (query) => {
   });
 };
 
-const renderVariablesPanel = () => {
-  if (!variablesBody) {
-    return;
-  }
-
+const collectRuntimeVariableMeta = () => {
   const variables = new Map();
 
   traverseNodes(flowNodes, (node) => {
@@ -851,11 +1034,646 @@ const renderVariablesPanel = () => {
 
       variables.set(name, {
         name,
-        type: node.declareConfig.isArray ? `${node.declareConfig.dataType}[]` : node.declareConfig.dataType,
-        value: isProgramRunning ? "undeclared" : "",
+        dataType: node.declareConfig.dataType,
+        isArray: Boolean(node.declareConfig.isArray),
+        typeLabel: node.declareConfig.isArray ? `${node.declareConfig.dataType}[]` : node.declareConfig.dataType,
       });
     });
   });
+
+  return variables;
+};
+
+const formatRuntimeValue = (value) => {
+  if (value === RUNTIME_UNDECLARED) {
+    return "undefined";
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => formatRuntimeValue(item)).join(", ")}]`;
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (typeof value === "boolean") {
+    return value ? "true" : "false";
+  }
+
+  if (value == null) {
+    return "";
+  }
+
+  return String(value);
+};
+
+const createRuntimeState = (mode) => {
+  const variableMeta = collectRuntimeVariableMeta();
+  const variableValues = new Map();
+
+  variableMeta.forEach((meta, name) => {
+    variableValues.set(name, RUNTIME_UNDECLARED);
+  });
+
+  return {
+    mode,
+    status: mode === "step" ? "Passo passo pronto" : "Esecuzione in corso",
+    variableMeta,
+    variableValues,
+    outputEntries: [],
+    waitingInput: null,
+    currentNodeId: null,
+    operationCount: 0,
+    cancelled: false,
+    completed: false,
+  };
+};
+
+const setRuntimeStatus = (status) => {
+  if (!runtimeState) {
+    return;
+  }
+
+  runtimeState.status = status;
+};
+
+const addConsoleEntry = (kind, text) => {
+  if (!runtimeState) {
+    return;
+  }
+
+  runtimeState.outputEntries.push({
+    kind,
+    text: String(text),
+  });
+};
+
+const refreshExecutionUi = () => {
+  renderVariablesPanel();
+  renderConsolePanel();
+  syncExecutionControls();
+  scheduleSidebarAutoSync();
+};
+
+const renderConsolePanel = () => {
+  if (terminalStatus) {
+    terminalStatus.textContent = runtimeState?.status ?? "Pronto";
+  }
+
+  if (consoleOutput) {
+    if (!runtimeState || runtimeState.outputEntries.length === 0) {
+      consoleOutput.innerHTML = '<p class="console-empty">Nessun output</p>';
+    } else {
+      consoleOutput.innerHTML = runtimeState.outputEntries
+        .map((entry) => `
+          <div class="console-entry is-${escapeHtml(entry.kind)}">
+            <p>${escapeHtml(entry.text)}</p>
+          </div>
+        `)
+        .join("");
+      consoleOutput.scrollTop = consoleOutput.scrollHeight;
+    }
+  }
+
+  const waitingInput = runtimeState?.waitingInput ?? null;
+
+  if (consoleInputForm) {
+    consoleInputForm.hidden = !waitingInput;
+  }
+
+  if (consoleInputLabel) {
+    consoleInputLabel.textContent = waitingInput?.label ?? "Input utente";
+  }
+
+  if (consoleInputButton) {
+    consoleInputButton.disabled = !waitingInput;
+  }
+
+  if (consoleInputField) {
+    consoleInputField.disabled = !waitingInput;
+    consoleInputField.placeholder = waitingInput ? "Scrivi qui..." : "";
+  }
+};
+
+const syncExecutionControls = () => {
+  if (runProgramButton) {
+    runProgramButton.disabled = isProgramRunning;
+  }
+
+  if (stepProgramButton) {
+    const isAwaitingStep = executionMode === "step" && typeof pendingStepResolver === "function";
+    const isAwaitingInput = Boolean(runtimeState?.waitingInput);
+    stepProgramButton.textContent = executionMode === "step" ? "Avanza" : "Passo passo";
+    stepProgramButton.disabled = executionMode === "run" || (executionMode === "step" && !isAwaitingStep) || isAwaitingInput;
+  }
+
+  if (stopProgramButton) {
+    stopProgramButton.disabled = !isProgramRunning;
+  }
+};
+
+const normalizeExpressionSyntax = (expression) =>
+  expression
+    .replace(/\btrue\b/gi, "true")
+    .replace(/\bfalse\b/gi, "false")
+    .replace(/\bmod\b/gi, "%")
+    .replace(/\band\b/gi, "&&")
+    .replace(/\bor\b/gi, "||")
+    .replace(/\bnot\b/gi, "!");
+
+const getRuntimeScope = () => {
+  if (!runtimeState) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Array.from(runtimeState.variableValues.entries()).map(([name, value]) => [
+      name,
+      value === RUNTIME_UNDECLARED ? undefined : value,
+    ])
+  );
+};
+
+const evaluateRuntimeExpression = (expression) => {
+  const normalizedExpression = normalizeExpressionSyntax(expression ?? "").trim();
+
+  if (!normalizedExpression) {
+    throw new Error("Espressione vuota.");
+  }
+
+  const identifierPattern = /[A-Za-z_][A-Za-z0-9_]*/g;
+  const runtimeKeywords = new Set(["true", "false"]);
+  const referencedVariables = new Set();
+  let match = null;
+
+  while ((match = identifierPattern.exec(normalizedExpression)) !== null) {
+    const [identifier] = match;
+
+    if (runtimeKeywords.has(identifier)) {
+      continue;
+    }
+
+    if (!runtimeState?.variableMeta.has(identifier)) {
+      throw new Error(`Riferimento a variabile non dichiarata: "${identifier}".`);
+    }
+
+    referencedVariables.add(identifier);
+  }
+
+  referencedVariables.forEach((variableName) => {
+    if (runtimeState?.variableValues.get(variableName) === RUNTIME_UNDECLARED) {
+      throw new Error(`La variabile "${variableName}" è stata dichiarata ma non ha ancora un valore.`);
+    }
+  });
+
+  try {
+    return Function("scope", `with (scope) { return (${normalizedExpression}); }`)(getRuntimeScope());
+  } catch (error) {
+    throw new Error(`Espressione non valida o non supportata: ${expression}`);
+  }
+};
+
+const ensureRuntimeVariableExists = (name) => {
+  if (!runtimeState?.variableMeta.has(name)) {
+    throw new Error(`Operazione su variabile non dichiarata: "${name}".`);
+  }
+};
+
+const castRuntimeValue = (value, meta, { fromInput = false } = {}) => {
+  if (meta.isArray) {
+    if (Array.isArray(value)) {
+      return value;
+    }
+
+    throw new Error(`Assegnazione non valida: "${meta.name}" accetta solo valori array.`);
+  }
+
+  switch (meta.dataType) {
+    case "Integer": {
+      const numericValue = Number(value);
+
+      if (!Number.isFinite(numericValue)) {
+        throw new Error(`Valore non valido per "${meta.name}": serve un numero intero.`);
+      }
+
+      return Math.trunc(numericValue);
+    }
+    case "Real": {
+      const numericValue = Number(value);
+
+      if (!Number.isFinite(numericValue)) {
+        throw new Error(`Valore non valido per "${meta.name}": serve un numero.`);
+      }
+
+      return numericValue;
+    }
+    case "Boolean": {
+      if (typeof value === "boolean") {
+        return value;
+      }
+
+      if (fromInput && typeof value === "string") {
+        const normalizedValue = value.trim().toLowerCase();
+
+        if (["true", "1", "vero", "yes"].includes(normalizedValue)) {
+          return true;
+        }
+
+        if (["false", "0", "falso", "no"].includes(normalizedValue)) {
+          return false;
+        }
+
+        throw new Error(`Valore non valido per "${meta.name}": serve un booleano.`);
+      }
+
+      return Boolean(value);
+    }
+    case "String":
+      return value == null ? "" : String(value);
+    default:
+      return value;
+  }
+};
+
+const setRuntimeVariableValue = (name, value, options) => {
+  ensureRuntimeVariableExists(name);
+  const meta = runtimeState.variableMeta.get(name);
+  runtimeState.variableValues.set(name, castRuntimeValue(value, meta, options));
+};
+
+const getRuntimeVariableValueForRead = (name) => {
+  ensureRuntimeVariableExists(name);
+  const value = runtimeState.variableValues.get(name);
+
+  if (value === RUNTIME_UNDECLARED) {
+    throw new Error(`La variabile "${name}" è stata dichiarata ma non ha ancora un valore.`);
+  }
+
+  return value;
+};
+
+const evaluateAssignmentValue = ({ variableName, operator, expression }) => {
+  const rightValue = evaluateRuntimeExpression(expression);
+
+  if (operator === "=") {
+    return rightValue;
+  }
+
+  const leftValue = getRuntimeVariableValueForRead(variableName);
+
+  switch (operator) {
+    case "+=":
+      return leftValue + rightValue;
+    case "-=":
+      return leftValue - rightValue;
+    case "*=":
+      return leftValue * rightValue;
+    case "/=":
+      return leftValue / rightValue;
+    case "%=":
+      return leftValue % rightValue;
+    default:
+      throw new Error(`Operatore di assegnazione non supportato: ${operator}`);
+  }
+};
+
+const resolveOutputTemplate = (template) =>
+  String(template ?? "").replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, variableName) => {
+    ensureRuntimeVariableExists(variableName);
+    const value = runtimeState.variableValues.get(variableName);
+
+    if (value === RUNTIME_UNDECLARED) {
+      throw new Error(`Impossibile mostrare "${variableName}": la variabile non ha ancora un valore.`);
+    }
+
+    return formatRuntimeValue(value);
+  });
+
+const focusConsoleInput = () => {
+  if (!consoleInputField) {
+    return;
+  }
+
+  requestAnimationFrame(() => {
+    consoleInputField.focus();
+    consoleInputField.select();
+  });
+};
+
+const requestRuntimeInput = (variableName) => {
+  ensureRuntimeVariableExists(variableName);
+
+  return new Promise((resolve) => {
+    pendingInputResolver = resolve;
+    runtimeState.waitingInput = {
+      variableName,
+      label: `Inserisci un valore per ${variableName}`,
+    };
+    setRuntimeStatus(`In attesa di input per ${variableName}`);
+    refreshExecutionUi();
+    focusConsoleInput();
+  });
+};
+
+const submitRuntimeInput = () => {
+  if (!runtimeState?.waitingInput || typeof pendingInputResolver !== "function" || !consoleInputField) {
+    return;
+  }
+
+  const { variableName } = runtimeState.waitingInput;
+  const rawValue = consoleInputField.value;
+
+  try {
+    setRuntimeVariableValue(variableName, rawValue, { fromInput: true });
+  } catch (error) {
+    setRuntimeStatus(error.message);
+    addConsoleEntry("error", error.message);
+    refreshExecutionUi();
+    focusConsoleInput();
+    return;
+  }
+
+  addConsoleEntry("input", `${variableName} = ${formatRuntimeValue(runtimeState.variableValues.get(variableName))}`);
+  consoleInputField.value = "";
+  runtimeState.waitingInput = null;
+  const resolver = pendingInputResolver;
+  pendingInputResolver = null;
+  setRuntimeStatus(executionMode === "step" ? "Passo passo pronto" : "Esecuzione in corso");
+  refreshExecutionUi();
+  resolver();
+};
+
+const waitForNextStep = () =>
+  new Promise((resolve) => {
+    pendingStepResolver = resolve;
+    setRuntimeStatus("Passo passo: premi Avanza");
+    refreshExecutionUi();
+  });
+
+const advanceStepExecution = () => {
+  if (typeof pendingStepResolver !== "function") {
+    return;
+  }
+
+  const resolver = pendingStepResolver;
+  pendingStepResolver = null;
+  setRuntimeStatus("Esecuzione in corso");
+  refreshExecutionUi();
+  resolver();
+};
+
+const cancelExecution = () => {
+  if (!runtimeState) {
+    return;
+  }
+
+  runtimeState.cancelled = true;
+  runtimeState.status = "Interruzione in corso";
+
+  if (typeof pendingStepResolver === "function") {
+    const resolver = pendingStepResolver;
+    pendingStepResolver = null;
+    resolver();
+  }
+
+  if (typeof pendingInputResolver === "function") {
+    runtimeState.waitingInput = null;
+    const resolver = pendingInputResolver;
+    pendingInputResolver = null;
+    resolver();
+  }
+
+  refreshExecutionUi();
+};
+
+const clearRuntimeSnapshot = () => {
+  runtimeState = null;
+  executionCursor = -1;
+  executionMode = null;
+  pendingStepResolver = null;
+  pendingInputResolver = null;
+};
+
+const finalizeExecutionSession = (status, { keepCursor = false } = {}) => {
+  if (runtimeState) {
+    runtimeState.status = status;
+    runtimeState.waitingInput = null;
+    runtimeState.completed = true;
+  }
+
+  isProgramRunning = false;
+  executionMode = null;
+  pendingStepResolver = null;
+  pendingInputResolver = null;
+
+  if (!keepCursor) {
+    executionCursor = -1;
+    if (runtimeState) {
+      runtimeState.currentNodeId = null;
+    }
+  }
+
+  renderFlowchart();
+  refreshExecutionUi();
+};
+
+const pauseBeforeNodeExecution = async (node) => {
+  if (!runtimeState || runtimeState.cancelled) {
+    throw new Error("__execution_cancelled__");
+  }
+
+  runtimeState.operationCount += 1;
+
+  if (runtimeState.operationCount > MAX_RUNTIME_OPERATIONS) {
+    throw new Error("Limite di esecuzione superato. Possibile ciclo infinito.");
+  }
+
+  executionCursor = node.id;
+  runtimeState.currentNodeId = node.id;
+  setRuntimeStatus(executionMode === "step" ? "Passo passo pronto" : "Esecuzione in corso");
+  renderFlowchart();
+  refreshExecutionUi();
+
+  if (executionMode === "step") {
+    await waitForNextStep();
+  }
+
+  if (runtimeState.cancelled) {
+    throw new Error("__execution_cancelled__");
+  }
+};
+
+const executeRuntimeNodes = async (nodes) => {
+  for (const node of nodes) {
+    if (node.type !== "do" && node.type !== "while") {
+      await pauseBeforeNodeExecution(node);
+    }
+
+    switch (node.type) {
+      case "declare":
+        break;
+      case "assign": {
+        const parsedAssignment = parseAssignmentStatement(node.value);
+
+        if (!parsedAssignment) {
+          throw new Error(`Assegnazione non valida nel nodo ${node.id}: usa =, +=, -=, *=, /= oppure %=.`);
+        }
+
+        setRuntimeVariableValue(
+          parsedAssignment.variableName,
+          evaluateAssignmentValue(parsedAssignment)
+        );
+        break;
+      }
+      case "input": {
+        const variableName = node.value.trim();
+
+        if (!variableName) {
+          throw new Error("Nodo Input incompleto: manca il nome della variabile.");
+        }
+
+        await requestRuntimeInput(variableName);
+        break;
+      }
+      case "output":
+        addConsoleEntry("output", resolveOutputTemplate(node.value));
+        break;
+      case "if":
+        await executeRuntimeNodes(
+          evaluateRuntimeExpression(node.value)
+            ? (node.branches?.trueBranch ?? [])
+            : (node.branches?.falseBranch ?? [])
+        );
+        break;
+      case "while":
+        while (true) {
+          await pauseBeforeNodeExecution(node);
+
+          if (!Boolean(evaluateRuntimeExpression(node.value))) {
+            break;
+          }
+
+          await executeRuntimeNodes(node.branches?.body ?? []);
+
+          if (runtimeState.cancelled) {
+            throw new Error("__execution_cancelled__");
+          }
+        }
+        break;
+      case "for": {
+        const config = node.forConfig ?? {};
+        const variableName = config.variable?.trim();
+        const startValue = evaluateRuntimeExpression(config.start ?? "");
+        const endValue = evaluateRuntimeExpression(config.end ?? "");
+        const stepValue = evaluateRuntimeExpression(config.step ?? "");
+        const numericStep = Number(stepValue);
+
+        if (!variableName) {
+          throw new Error("Nodo For incompleto: manca la variabile di controllo.");
+        }
+
+        if (!Number.isFinite(numericStep) || numericStep === 0) {
+          throw new Error("Configurazione For non valida: il passo deve essere un numero diverso da zero.");
+        }
+
+        setRuntimeVariableValue(variableName, startValue);
+
+        while (
+          numericStep > 0
+            ? Number(runtimeState.variableValues.get(variableName)) < Number(endValue)
+            : Number(runtimeState.variableValues.get(variableName)) > Number(endValue)
+        ) {
+          await executeRuntimeNodes(node.branches?.body ?? []);
+
+          if (runtimeState.cancelled) {
+            throw new Error("__execution_cancelled__");
+          }
+
+          const nextValue = Number(runtimeState.variableValues.get(variableName)) + numericStep;
+          setRuntimeVariableValue(variableName, nextValue);
+        }
+        break;
+      }
+      case "do":
+        do {
+          await executeRuntimeNodes(node.branches?.body ?? []);
+
+          if (runtimeState.cancelled) {
+            throw new Error("__execution_cancelled__");
+          }
+
+          await pauseBeforeNodeExecution(node);
+        } while (Boolean(evaluateRuntimeExpression(node.value)));
+        break;
+      case "comment":
+        break;
+      default:
+        throw new Error(`Il nodo di tipo "${node.type}" non è ancora supportato in esecuzione.`);
+    }
+
+    renderFlowchart();
+    refreshExecutionUi();
+  }
+};
+
+const startProgramExecution = async (mode) => {
+  if (isProgramRunning) {
+    if (mode === "step" && executionMode === "step") {
+      advanceStepExecution();
+    }
+
+    return;
+  }
+
+  if (!propertyDialogBackdrop.hidden) {
+    closePropertyDialog({ restoreFocus: false });
+  }
+
+  if (!insertDialogBackdrop.hidden) {
+    closeInsertDialog();
+  }
+
+  runtimeState = createRuntimeState(mode);
+  executionMode = mode;
+  isProgramRunning = true;
+  executionCursor = -1;
+  selectedNodeIds = new Set();
+  previewSelectedNodeIds = new Set();
+  renderFlowchart();
+  refreshExecutionUi();
+
+  try {
+    await executeRuntimeNodes(flowNodes);
+
+    if (runtimeState?.cancelled) {
+      finalizeExecutionSession("Esecuzione interrotta");
+      return;
+    }
+
+    finalizeExecutionSession("Esecuzione completata");
+  } catch (error) {
+    if (error instanceof Error && error.message === "__execution_cancelled__") {
+      finalizeExecutionSession("Esecuzione interrotta");
+      return;
+    }
+
+    const message = error instanceof Error ? error.message : "Errore durante l'esecuzione.";
+
+    if (runtimeState) {
+      addConsoleEntry("error", message);
+    }
+
+    finalizeExecutionSession(message, { keepCursor: true });
+  }
+};
+
+const renderVariablesPanel = () => {
+  if (!variablesBody) {
+    return;
+  }
+
+  const variables = runtimeState?.variableMeta ?? collectRuntimeVariableMeta();
 
   if (variables.size === 0) {
     variablesBody.innerHTML = `
@@ -870,13 +1688,17 @@ const renderVariablesPanel = () => {
 
   variablesBody.innerHTML = Array.from(variables.values())
     .map(
-      (variable) => `
+      (variable) => {
+        const runtimeValue = runtimeState?.variableValues.get(variable.name);
+
+        return `
         <div class="table-row">
           <span>${escapeHtml(variable.name)}</span>
-          <span>${escapeHtml(variable.type)}</span>
-          <span>${escapeHtml(variable.value)}</span>
+          <span>${escapeHtml(variable.typeLabel)}</span>
+          <span>${escapeHtml(runtimeState ? formatRuntimeValue(runtimeValue) : "")}</span>
         </div>
-      `
+      `;
+      }
     )
     .join("");
 };
@@ -915,15 +1737,15 @@ const getNodeMarkup = (node) => {
   }
 
   if (node.type === "assign" && node.value) {
-    const match = node.value.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/);
+    const parsedAssignment = parseAssignmentStatement(node.value);
 
-    if (match) {
-      const [, variableName, expression] = match;
+    if (parsedAssignment) {
+      const { variableName, operator, expression } = parsedAssignment;
       const variableMarkup = declaredNames.has(variableName)
         ? escapeHtml(variableName)
         : `<span class="invalid-variable">${escapeHtml(variableName)}</span>`;
 
-      return `${prefixMarkup}${variableMarkup} = ${highlightUndeclaredVariablesInText(expression, declaredNames)}`;
+      return `${prefixMarkup}${variableMarkup} ${escapeHtml(operator)} ${highlightUndeclaredVariablesInText(expression, declaredNames)}`;
     }
   }
 
@@ -1093,7 +1915,7 @@ const createNodeMarkup = (node) => {
   return `
     <button
       type="button"
-      class="flowchart-node ${definition.shapeClass}${node.isDraft ? " is-pending" : ""}${selectedNodeIds.has(node.id) ? " is-selected" : ""}"
+      class="flowchart-node ${definition.shapeClass}${node.isDraft ? " is-pending" : ""}${selectedNodeIds.has(node.id) ? " is-selected" : ""}${executionCursor === node.id ? " is-executing" : ""}"
       data-node-id="${node.id}"
       aria-label="Modifica ${escapeHtml(displayText)}"
     >
@@ -1304,6 +2126,7 @@ const renderSvgNode = (node, x, y) => {
     `svg-node-${node.type}`,
     node.isDraft ? "is-pending" : "",
     selectedNodeIds.has(node.id) ? "is-selected" : "",
+    executionCursor === node.id ? "is-executing" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -1772,10 +2595,14 @@ const renderFlowchart = () => {
 
   applyDiagramZoom();
 
-  renderVariablesPanel();
+  refreshExecutionUi();
 };
 
 const openInsertDialog = (insertIndex, sourceButton) => {
+  if (isProgramRunning) {
+    return;
+  }
+
   pendingInsertTarget = insertIndex;
   lastConnectorButton = sourceButton;
   hideInsertDialogNotice();
@@ -1800,6 +2627,10 @@ const closeInsertDialog = () => {
 };
 
 const openPropertyDialog = (nodeId) => {
+  if (isProgramRunning) {
+    return;
+  }
+
   const node = findNodeById(nodeId);
 
   if (!node) {
@@ -1847,7 +2678,7 @@ const openPropertyDialog = (nodeId) => {
     };
 
     declareNameInput.value = declareConfig.names.join(", ");
-    declareArrayInput.checked = declareConfig.isArray;
+    declareArrayInput.checked = false;
     declareTypeInputs.forEach((input) => {
       input.checked = input.value === declareConfig.dataType;
     });
@@ -1908,6 +2739,8 @@ const removeDraftNode = () => {
 };
 
 const resetFlowchart = () => {
+  cancelExecution();
+  clearRuntimeSnapshot();
   flowNodes.length = 0;
   nextNodeId = 1;
   pendingInsertTarget = null;
@@ -1920,7 +2753,7 @@ const resetFlowchart = () => {
 };
 
 const deleteSelectedNode = () => {
-  if (selectedNodeIds.size === 0) {
+  if (isProgramRunning || selectedNodeIds.size === 0) {
     return;
   }
 
@@ -1928,6 +2761,7 @@ const deleteSelectedNode = () => {
   Array.from(removableIds).forEach((nodeId) => {
     removeNodeById(nodeId);
   });
+  clearRuntimeSnapshot();
   selectedNodeIds = new Set();
   saveFlowchartState();
   renderFlowchart();
@@ -1961,7 +2795,7 @@ const finalizeNode = () => {
     node.declareConfig = {
       names,
       dataType,
-      isArray: declareArrayInput.checked,
+      isArray: false,
     };
     node.value = names.join(", ");
   } else if (node.type === "for") {
@@ -1997,6 +2831,7 @@ const finalizeNode = () => {
   }
 
   node.isDraft = false;
+  clearRuntimeSnapshot();
   saveFlowchartState();
   renderFlowchart();
   closePropertyDialog();
@@ -2046,6 +2881,7 @@ const insertNode = (type) => {
 
   const targetContainer = getContainerByPath(pendingInsertTarget.path);
   targetContainer.splice(pendingInsertTarget.index, 0, newNode);
+  clearRuntimeSnapshot();
   renderFlowchart();
   closeInsertDialog();
   openPropertyDialog(newNode.id);
@@ -2056,7 +2892,7 @@ insertNodeButtons.forEach((button) => {
     const nodeType = button.dataset.nodeType;
 
     if (nodeType === "call") {
-      showInsertDialogNotice("Il nodo Call al momento non è utilizzabile perché non è ancora stato sviluppato.");
+      showInsertDialogNotice(NOT_YET_IMPLEMENTED_MESSAGE);
       return;
     }
 
@@ -2072,6 +2908,18 @@ if (insertDialogClose) {
 
 if (insertDialogNoticeClose) {
   insertDialogNoticeClose.addEventListener("click", hideInsertDialogNotice);
+}
+
+if (declareArrayOption && declareArrayInput) {
+  declareArrayOption.addEventListener("click", (event) => {
+    event.preventDefault();
+    declareArrayInput.checked = false;
+    showPropertyError(NOT_YET_IMPLEMENTED_MESSAGE);
+  });
+}
+
+if (propertyErrorClose) {
+  propertyErrorClose.addEventListener("click", hidePropertyError);
 }
 
 if (flowchartRoot) {
@@ -2499,6 +3347,31 @@ if (newDiagramButton) {
   });
 }
 
+if (runProgramButton) {
+  runProgramButton.addEventListener("click", () => {
+    startProgramExecution("run");
+  });
+}
+
+if (stepProgramButton) {
+  stepProgramButton.addEventListener("click", () => {
+    startProgramExecution("step");
+  });
+}
+
+if (stopProgramButton) {
+  stopProgramButton.addEventListener("click", () => {
+    cancelExecution();
+  });
+}
+
+if (consoleInputForm) {
+  consoleInputForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    submitRuntimeInput();
+  });
+}
+
 if (showNodeTypeToggle) {
   showNodeTypeToggle.addEventListener("change", () => {
     showNodeTypeInLabel = showNodeTypeToggle.checked;
@@ -2547,3 +3420,4 @@ document.addEventListener("keydown", (event) => {
 loadNodeLabelPreference();
 loadFlowchartState();
 renderFlowchart();
+syncExecutionControls();

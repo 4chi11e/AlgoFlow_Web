@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Flowgorithm Web</title>
+  <title>AlgoFlow</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
@@ -12,31 +12,37 @@
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <div>
-        <p class="eyebrow">Prototype</p>
-        <h1>Flowgorithm Web</h1>
-      </div>
-      <div class="topbar-actions">
-        <label class="topbar-toggle" for="show-node-type-toggle">
-          <input type="checkbox" id="show-node-type-toggle">
-          <span>Mostra nome nodo</span>
-        </label>
+      <div class="topbar-group topbar-group-start">
         <button type="button" class="ghost-button" id="new-diagram-button">Nuovo</button>
         <button type="button" class="ghost-button">Carica</button>
         <button type="button" class="ghost-button">Salva</button>
-        <button type="button" class="primary-button">Esegui</button>
+      </div>
+      <div class="topbar-brand">
+        <p class="eyebrow">Prototype</p>
+        <h1>AlgoFlow</h1>
+      </div>
+      <div class="topbar-group topbar-group-end">
+        <button type="button" class="ghost-button" id="step-program-button">Passo passo</button>
+        <button type="button" class="primary-button" id="run-program-button">Esegui</button>
+        <button type="button" class="ghost-button" id="stop-program-button" disabled>Stop</button>
       </div>
     </header>
 
     <main class="workspace">
       <section class="panel diagram-panel" aria-label="Area principale">
-        <div class="folder-tabs" role="tablist" aria-label="Vista area principale">
-          <button type="button" class="folder-tab is-active" data-main-target="diagram-view" role="tab" aria-selected="true">
-            <span class="folder-tab-label">Diagramma</span>
-          </button>
-          <button type="button" class="folder-tab" data-main-target="code-view" role="tab" aria-selected="false">
-            <span class="folder-tab-label">Codice</span>
-          </button>
+        <div class="folder-tabs">
+          <div class="folder-tab-list" role="tablist" aria-label="Vista area principale">
+            <button type="button" class="folder-tab is-active" data-main-target="diagram-view" role="tab" aria-selected="true">
+              <span class="folder-tab-label">Diagramma</span>
+            </button>
+            <button type="button" class="folder-tab" data-main-target="code-view" role="tab" aria-selected="false">
+              <span class="folder-tab-label">Codice</span>
+            </button>
+          </div>
+          <label class="topbar-toggle folder-toggle" for="show-node-type-toggle">
+            <input type="checkbox" id="show-node-type-toggle">
+            <span>Mostra nome nodo</span>
+          </label>
         </div>
 
         <div class="main-content">
@@ -97,7 +103,7 @@
                     <h4>Looping</h4>
                     <button type="button" class="insert-option shape-loop" data-node-type="while">While</button>
                     <button type="button" class="insert-option shape-loop" data-node-type="for">For</button>
-                    <button type="button" class="insert-option shape-loop" data-node-type="do">Do</button>
+                    <button type="button" class="insert-option shape-loop" data-node-type="do">Do-While</button>
                   </div>
                 </div>
               </section>
@@ -116,7 +122,10 @@
                 </div>
 
                 <form class="property-form" id="property-form">
-                  <div class="property-error" id="property-error" hidden></div>
+                  <div class="property-error" id="property-error" hidden>
+                    <p class="property-error-text" id="property-error-text"></p>
+                    <button type="button" class="property-error-close" id="property-error-close" aria-label="Chiudi messaggio">&times;</button>
+                  </div>
 
                   <label class="property-field" id="generic-property-field">
                     <span id="property-field-label">Valore</span>
@@ -151,7 +160,7 @@
                         </label>
                       </fieldset>
 
-                      <label class="checkbox-option">
+                      <label class="checkbox-option is-disabled" id="declare-array-option" aria-disabled="true">
                         <input type="checkbox" id="declare-array-input">
                         <span>Array?</span>
                       </label>
@@ -209,6 +218,10 @@ End</code></pre>
         </div>
       </section>
 
+      <div class="workspace-resizer" id="workspace-resizer" aria-hidden="true">
+        <div class="workspace-resizer-handle"></div>
+      </div>
+
       <aside class="panel sidebar-panel" aria-label="Pannello laterale">
         <div class="sidebar-content">
           <section class="sidebar-section variables-section" aria-labelledby="variables-title">
@@ -238,16 +251,19 @@ End</code></pre>
           <section class="sidebar-section terminal-section" aria-labelledby="terminal-title">
             <div class="section-heading">
               <h3 id="terminal-title">Terminale</h3>
+              <span class="console-status" id="terminal-status">Pronto</span>
             </div>
             <div class="console-shell">
-              <div class="console-line">
-                <span class="console-label">Programma</span>
-                <p>Inserisci un valore per <strong>name</strong></p>
+              <div class="console-output" id="console-output">
+                <p class="console-empty">Nessun output</p>
               </div>
-              <label class="console-input">
-                <span>Input utente</span>
-                <input type="text" placeholder="Scrivi qui...">
-              </label>
+              <form class="console-input" id="console-input-form" hidden>
+                <label for="console-input-field" id="console-input-label">Input utente</label>
+                <div class="console-input-row">
+                  <input type="text" id="console-input-field" autocomplete="off" placeholder="Scrivi qui...">
+                  <button type="submit" class="console-submit-button" id="console-input-button">Invia</button>
+                </div>
+              </form>
             </div>
           </section>
         </div>
