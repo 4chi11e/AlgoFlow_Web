@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flowgorithm Web</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Prototype</p>
+        <h1>Flowgorithm Web</h1>
+      </div>
+      <div class="topbar-actions">
+        <label class="topbar-toggle" for="show-node-type-toggle">
+          <input type="checkbox" id="show-node-type-toggle">
+          <span>Mostra nome nodo</span>
+        </label>
+        <button type="button" class="ghost-button" id="new-diagram-button">Nuovo</button>
+        <button type="button" class="ghost-button">Carica</button>
+        <button type="button" class="ghost-button">Salva</button>
+        <button type="button" class="primary-button">Esegui</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="panel diagram-panel" aria-label="Area principale">
+        <div class="folder-tabs" role="tablist" aria-label="Vista area principale">
+          <button type="button" class="folder-tab is-active" data-main-target="diagram-view" role="tab" aria-selected="true">
+            <span class="folder-tab-label">Diagramma</span>
+          </button>
+          <button type="button" class="folder-tab" data-main-target="code-view" role="tab" aria-selected="false">
+            <span class="folder-tab-label">Codice</span>
+          </button>
+        </div>
+
+        <div class="main-content">
+          <section class="main-view is-active" id="diagram-view" role="tabpanel">
+            <div class="diagram-canvas" id="diagram-canvas">
+              <div class="flowchart-root" id="flowchart-root" aria-label="Diagramma iniziale"></div>
+              <div class="selection-box" id="selection-box" hidden></div>
+              <div class="canvas-grid" aria-hidden="true"></div>
+            </div>
+
+            <div class="insert-dialog-backdrop" id="insert-dialog-backdrop" hidden>
+              <section class="insert-dialog" role="dialog" aria-modal="true" aria-labelledby="insert-dialog-title">
+                <div class="insert-dialog-header">
+                  <h3 id="insert-dialog-title">Inserisci istruzione</h3>
+                  <button type="button" class="dialog-close" id="insert-dialog-close" aria-label="Chiudi finestra">&times;</button>
+                </div>
+
+                <div class="insert-dialog-notice" id="insert-dialog-notice" hidden>
+                  <button type="button" class="insert-dialog-notice-close" id="insert-dialog-notice-close" aria-label="Chiudi messaggio">&times;</button>
+                  <p class="insert-dialog-notice-text" id="insert-dialog-notice-text"></p>
+                </div>
+
+                <div class="insert-dialog-actions">
+                  <button type="button" class="quick-action quick-action-paste">
+                    <span class="quick-action-icon" aria-hidden="true">
+                      <span class="icon-clipboard"></span>
+                      <span class="icon-paper"></span>
+                    </span>
+                    <span class="quick-action-label">Incolla</span>
+                  </button>
+
+                  <button type="button" class="quick-action quick-action-comment" data-node-type="comment">
+                    <span class="quick-action-icon icon-comment" aria-hidden="true"></span>
+                    <span class="quick-action-label">Commento</span>
+                  </button>
+                </div>
+
+                <div class="insert-dialog-grid">
+                  <div class="insert-column">
+                    <h4>Input / Output</h4>
+                    <button type="button" class="insert-option shape-input" data-node-type="input">Input</button>
+                    <button type="button" class="insert-option shape-output" data-node-type="output">Output</button>
+                  </div>
+
+                  <div class="insert-column">
+                    <h4>Variables</h4>
+                    <button type="button" class="insert-option shape-declare" data-node-type="declare">Declare</button>
+                    <button type="button" class="insert-option shape-assign" data-node-type="assign">Assign</button>
+                  </div>
+
+                  <div class="insert-column">
+                    <h4>Control</h4>
+                    <button type="button" class="insert-option shape-if" data-node-type="if">If</button>
+                    <button type="button" class="insert-option shape-call is-disabled" data-node-type="call" aria-disabled="true">Call</button>
+                  </div>
+
+                  <div class="insert-column">
+                    <h4>Looping</h4>
+                    <button type="button" class="insert-option shape-loop" data-node-type="while">While</button>
+                    <button type="button" class="insert-option shape-loop" data-node-type="for">For</button>
+                    <button type="button" class="insert-option shape-loop" data-node-type="do">Do</button>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <div class="property-dialog-backdrop" id="property-dialog-backdrop" hidden>
+              <section class="property-dialog" role="dialog" aria-modal="true" aria-labelledby="property-dialog-title">
+                <div class="property-dialog-header">
+                  <h3 id="property-dialog-title">Proprietà</h3>
+                  <button type="button" class="dialog-close" id="property-dialog-close" aria-label="Chiudi finestra">&times;</button>
+                </div>
+
+                <div class="property-dialog-hero">
+                  <div class="property-preview" id="property-preview"></div>
+                  <p class="property-description" id="property-description"></p>
+                </div>
+
+                <form class="property-form" id="property-form">
+                  <div class="property-error" id="property-error" hidden></div>
+
+                  <label class="property-field" id="generic-property-field">
+                    <span id="property-field-label">Valore</span>
+                    <textarea id="property-input" rows="1"></textarea>
+                    <div class="assign-suggestions" id="assign-suggestions" hidden></div>
+                  </label>
+
+                  <div class="declare-fields" id="declare-fields" hidden>
+                    <label class="property-field">
+                      <span>Variable Names:</span>
+                      <input type="text" id="declare-name-input" autocomplete="off">
+                    </label>
+
+                    <div class="declare-type-grid">
+                      <fieldset class="declare-type-group">
+                        <legend>Type:</legend>
+                        <label class="radio-option">
+                          <input type="radio" name="declare-type" value="Integer" checked>
+                          <span>Integer</span>
+                        </label>
+                        <label class="radio-option">
+                          <input type="radio" name="declare-type" value="Real">
+                          <span>Real</span>
+                        </label>
+                        <label class="radio-option">
+                          <input type="radio" name="declare-type" value="String">
+                          <span>String</span>
+                        </label>
+                        <label class="radio-option">
+                          <input type="radio" name="declare-type" value="Boolean">
+                          <span>Boolean</span>
+                        </label>
+                      </fieldset>
+
+                      <label class="checkbox-option">
+                        <input type="checkbox" id="declare-array-input">
+                        <span>Array?</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div class="for-fields" id="for-fields" hidden>
+                    <div class="for-fields-grid">
+                      <label class="property-field">
+                        <span>Variabile:</span>
+                        <input type="text" id="for-variable-input" autocomplete="off">
+                      </label>
+
+                      <label class="property-field">
+                        <span>Valore iniziale:</span>
+                        <input type="text" id="for-start-input" autocomplete="off">
+                      </label>
+
+                      <label class="property-field">
+                        <span>Valore finale escluso:</span>
+                        <input type="text" id="for-end-input" autocomplete="off">
+                      </label>
+
+                      <label class="property-field">
+                        <span>Passo:</span>
+                        <input type="text" id="for-step-input" autocomplete="off">
+                      </label>
+                    </div>
+                  </div>
+
+                  <div class="property-dialog-actions">
+                    <button type="submit" class="property-button property-button-primary">OK</button>
+                    <button type="button" class="property-button" id="property-dialog-cancel">Cancel</button>
+                  </div>
+                </form>
+              </section>
+            </div>
+          </section>
+
+          <section class="main-view" id="code-view" role="tabpanel" hidden>
+            <div class="code-canvas">
+              <div class="code-card">
+                <h3>Vista codice</h3>
+                <div class="language-tabs" role="tablist" aria-label="Selezione linguaggio">
+                  <button type="button" class="language-tab is-active" aria-selected="true">C</button>
+                  <button type="button" class="language-tab" aria-selected="false">C++</button>
+                  <button type="button" class="language-tab" aria-selected="false">Python</button>
+                </div>
+              </div>
+              <pre class="code-preview"><code>Start
+  ...
+End</code></pre>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <aside class="panel sidebar-panel" aria-label="Pannello laterale">
+        <div class="sidebar-content">
+          <section class="sidebar-section variables-section" aria-labelledby="variables-title">
+            <div class="section-heading">
+              <h3 id="variables-title">Variabili</h3>
+            </div>
+            <div class="variables-table">
+              <div class="table-head">
+                <span>Nome</span>
+                <span>Tipo</span>
+                <span>Valore</span>
+              </div>
+              <div class="variables-body" id="variables-body">
+                <div class="table-row muted">
+                  <span>Nessuna variabile</span>
+                  <span>-</span>
+                  <span>-</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div class="sidebar-resizer" id="sidebar-resizer" aria-hidden="true">
+            <div class="sidebar-resizer-handle"></div>
+          </div>
+
+          <section class="sidebar-section terminal-section" aria-labelledby="terminal-title">
+            <div class="section-heading">
+              <h3 id="terminal-title">Terminale</h3>
+            </div>
+            <div class="console-shell">
+              <div class="console-line">
+                <span class="console-label">Programma</span>
+                <p>Inserisci un valore per <strong>name</strong></p>
+              </div>
+              <label class="console-input">
+                <span>Input utente</span>
+                <input type="text" placeholder="Scrivi qui...">
+              </label>
+            </div>
+          </section>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
