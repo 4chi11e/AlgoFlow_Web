@@ -172,11 +172,16 @@
                         </label>
                       </fieldset>
 
-                      <label class="checkbox-option is-disabled" id="declare-array-option" aria-disabled="true">
+                      <label class="checkbox-option" id="declare-array-option">
                         <input type="checkbox" id="declare-array-input">
                         <span>Array?</span>
                       </label>
                     </div>
+
+                    <label class="property-field" id="declare-array-length-field" hidden>
+                      <span>Array Length:</span>
+                      <input type="number" id="declare-array-length-input" min="1" step="1" inputmode="numeric">
+                    </label>
                   </div>
 
                   <div class="for-fields" id="for-fields" hidden>
