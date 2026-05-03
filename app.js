@@ -1895,18 +1895,27 @@ const pushUndoSnapshot = () => {
 };
 
 const getAlgoFlowSaveError = (error) => {
-  if (error instanceof DOMException && error.name === "AbortError") {
-    return error;
-  }
-
   const rawMessage = error instanceof Error ? error.message : String(error ?? "");
   const normalizedMessage = rawMessage.toLowerCase();
+  const domErrorName = error instanceof DOMException ? error.name : "";
 
   if (
+    domErrorName === "NoModificationAllowedError" ||
+    domErrorName === "InvalidStateError" ||
+    domErrorName === "NotAllowedError" ||
+    domErrorName === "SecurityError" ||
     normalizedMessage.includes("access denied") ||
+    normalizedMessage.includes("access is denied") ||
     normalizedMessage.includes("permission denied") ||
+    normalizedMessage.includes("operation not permitted") ||
+    normalizedMessage.includes("eacces") ||
+    normalizedMessage.includes("eperm") ||
+    normalizedMessage.includes("ebusy") ||
     normalizedMessage.includes("being used by another process") ||
     normalizedMessage.includes("used by another process") ||
+    normalizedMessage.includes("in use") ||
+    normalizedMessage.includes("failed to create or truncate file") ||
+    normalizedMessage.includes("create or truncate file") ||
     normalizedMessage.includes("process cannot access the file") ||
     normalizedMessage.includes("the requested file could not be locked") ||
     normalizedMessage.includes("locked")
@@ -1919,6 +1928,40 @@ const getAlgoFlowSaveError = (error) => {
   }
 
   return new Error("Impossibile completare il salvataggio.");
+};
+
+const isAlgoFlowUserCancelledSavePicker = (error) => {
+  if (!(error instanceof DOMException) || error.name !== "AbortError") {
+    return false;
+  }
+
+  const message = String(error.message ?? "").toLowerCase();
+
+  if (
+    message.includes("create or truncate file") ||
+    message.includes("failed to create") ||
+    message.includes("access denied") ||
+    message.includes("permission denied") ||
+    message.includes("locked") ||
+    message.includes("in use")
+  ) {
+    return false;
+  }
+
+  return true;
+};
+
+const showAlgoFlowSaveErrorAlert = (error) => {
+  const saveError = getAlgoFlowSaveError(error);
+
+  try {
+    window.alert(saveError.message);
+  } catch {
+    // Ignore alert failures and still propagate the mapped error.
+  }
+
+  saveError.algoFlowAlreadyNotified = true;
+  return saveError;
 };
 
 const buildAlgoFlowSavePayload = async (format) => {
@@ -1948,10 +1991,25 @@ const buildAlgoFlowSavePayload = async (format) => {
 const exportFlowchartWithPicker = async () => {
   if (typeof window.showSaveFilePicker === "function") {
     const pickerOptions = await buildAlgoFlowSavePickerOptions();
-    const fileHandle = await window.showSaveFilePicker({
-      ...pickerOptions,
-      suggestedName: getSuggestedPdfFileName(),
-    });
+    let fileHandle;
+
+    try {
+      fileHandle = await window.showSaveFilePicker({
+        ...pickerOptions,
+        suggestedName: getSuggestedPdfFileName(),
+      });
+    } catch (error) {
+      if (isAlgoFlowUserCancelledSavePicker(error)) {
+        return;
+      }
+
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw showAlgoFlowSaveErrorAlert(error);
+      }
+
+      throw error;
+    }
+
     const selectedFormat = getSaveFormatFromHandle(fileHandle, pickerOptions.types);
     const payload = await buildAlgoFlowSavePayload(selectedFormat);
 
@@ -1980,7 +2038,7 @@ const exportFlowchartWithPicker = async () => {
         // Ignore abort failures after a write error.
       }
 
-      throw getAlgoFlowSaveError(error);
+      throw showAlgoFlowSaveErrorAlert(error);
     }
 
     await saveLastAlgoFlowPickerHandle(fileHandle).catch(() => {});
@@ -7609,7 +7667,7 @@ if (saveDiagramButton) {
     try {
       await exportFlowchartWithPicker();
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
+      if (error && typeof error === "object" && error.algoFlowAlreadyNotified) {
         return;
       }
 
