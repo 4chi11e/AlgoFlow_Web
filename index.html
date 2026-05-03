@@ -145,6 +145,19 @@
                     <div class="assign-suggestions" id="assign-suggestions" hidden></div>
                   </label>
 
+                  <div class="output-fields" id="output-fields" hidden>
+                    <label class="checkbox-option">
+                      <input type="checkbox" id="output-newline-input" checked>
+                      <span>A capo dopo Output</span>
+                    </label>
+
+                    <div class="output-quoted-preview" id="output-quoted-preview" aria-hidden="true">
+                      <span class="output-quoted-mark">"</span>
+                      <span class="output-quoted-text" id="output-quoted-text"></span>
+                      <span class="output-quoted-mark">"</span>
+                    </div>
+                  </div>
+
                   <div class="declare-fields" id="declare-fields" hidden>
                     <label class="property-field">
                       <span>Variable Names:</span>
@@ -197,7 +210,7 @@
                       </label>
 
                       <label class="property-field">
-                        <span>Valore finale escluso:</span>
+                        <span>Valore finale:</span>
                         <input type="text" id="for-end-input" autocomplete="off">
                       </label>
 
@@ -206,6 +219,11 @@
                         <input type="text" id="for-step-input" autocomplete="off">
                       </label>
                     </div>
+
+                    <label class="checkbox-option">
+                      <input type="checkbox" id="for-include-end-input" checked>
+                      <span>Includi valore finale (<= oppure >=)</span>
+                    </label>
                   </div>
 
                   <div class="property-dialog-actions">

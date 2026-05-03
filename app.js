@@ -54,6 +54,10 @@ const propertyError = document.querySelector("#property-error");
 const propertyErrorText = document.querySelector("#property-error-text");
 const propertyErrorClose = document.querySelector("#property-error-close");
 const genericPropertyField = document.querySelector("#generic-property-field");
+const outputFields = document.querySelector("#output-fields");
+const outputNewlineInput = document.querySelector("#output-newline-input");
+const outputQuotedPreview = document.querySelector("#output-quoted-preview");
+const outputQuotedText = document.querySelector("#output-quoted-text");
 const declareFields = document.querySelector("#declare-fields");
 const declareNameInput = document.querySelector("#declare-name-input");
 const declareArrayOption = document.querySelector("#declare-array-option");
@@ -66,6 +70,7 @@ const forVariableInput = document.querySelector("#for-variable-input");
 const forStartInput = document.querySelector("#for-start-input");
 const forEndInput = document.querySelector("#for-end-input");
 const forStepInput = document.querySelector("#for-step-input");
+const forIncludeEndInput = document.querySelector("#for-include-end-input");
 const propertyForm = document.querySelector("#property-form");
 const STORAGE_KEY = "flowgorithm-web-diagram";
 const HISTORY_STORAGE_KEY = "algoflow-history";
@@ -346,6 +351,15 @@ const syncPropertyInputSize = () => {
   propertyInput.style.overflowY = propertyInput.scrollHeight > targetHeight ? "auto" : "hidden";
 };
 
+const syncOutputQuotedPreview = () => {
+  if (!outputQuotedText || !propertyInput) {
+    return;
+  }
+
+  const outputValue = String(propertyInput.value ?? "");
+  outputQuotedText.textContent = outputValue || " ";
+};
+
 const getStructuredBranchKeys = (type) => {
   switch (type) {
     case "if":
@@ -514,6 +528,13 @@ const serializeNode = (node) => {
       start: node.forConfig.start,
       end: node.forConfig.end,
       step: node.forConfig.step,
+      includeEnd: node.forConfig.includeEnd !== false,
+    };
+  }
+
+  if (node.outputConfig) {
+    serializedNode.outputConfig = {
+      appendNewline: node.outputConfig.appendNewline !== false,
     };
   }
 
@@ -582,12 +603,24 @@ const normalizeNode = (rawNode) => {
           start: typeof rawNode.forConfig.start === "string" ? rawNode.forConfig.start : "",
           end: typeof rawNode.forConfig.end === "string" ? rawNode.forConfig.end : "",
           step: typeof rawNode.forConfig.step === "string" ? rawNode.forConfig.step : "",
+          includeEnd: rawNode.forConfig.includeEnd !== false,
         }
       : {
           variable: "",
           start: "",
           end: "",
           step: "",
+          includeEnd: true,
+        };
+  }
+
+  if (rawNode.type === "output") {
+    normalizedNode.outputConfig = rawNode.outputConfig
+      ? {
+          appendNewline: rawNode.outputConfig.appendNewline !== false,
+        }
+      : {
+          appendNewline: true,
         };
   }
 
@@ -698,8 +731,8 @@ const renameIdentifierAcrossNodes = (nodes, fromName, toName) => {
         node.forConfig.start = replaceIdentifierInExpression(node.forConfig.start, fromName, toName);
         node.forConfig.end = replaceIdentifierInExpression(node.forConfig.end, fromName, toName);
         node.forConfig.step = replaceIdentifierInExpression(node.forConfig.step, fromName, toName);
-        const { variable, start, end, step } = node.forConfig;
-        node.value = buildForDisplayText({ variable, start, end, step });
+        const { variable, start, end, step, includeEnd } = node.forConfig;
+        node.value = buildForDisplayText({ variable, start, end, step, includeEnd });
       } else {
         node.value = replaceIdentifierInExpression(node.value, fromName, toName);
       }
@@ -1297,10 +1330,13 @@ const exportNodesToFlowgorithmXml = (nodes, indentLevel = 5) => {
         lines.push(`${indent}<input variable="${escapeXmlAttribute(node.value.trim())}"/>`);
         break;
       case "output":
+        {
+          const appendNewline = node.outputConfig?.appendNewline !== false;
         lines.push(
-          `${indent}<output expression="${escapeXmlAttribute(formatTemplateAsFlowgorithmOutputExpression(node.value))}" newline="True"/>`
+          `${indent}<output expression="${escapeXmlAttribute(formatTemplateAsFlowgorithmOutputExpression(node.value))}" newline="${appendNewline ? "True" : "False"}"/>`
         );
         break;
+        }
       case "comment":
         lines.push(`${indent}<comment text="${escapeXmlAttribute(node.value)}"/>`);
         break;
@@ -1325,8 +1361,9 @@ const exportNodesToFlowgorithmXml = (nodes, indentLevel = 5) => {
         break;
       case "for": {
         const config = node.forConfig ?? {};
+        const includeEndText = config.includeEnd === false ? "False" : "True";
         lines.push(
-          `${indent}<for variable="${escapeXmlAttribute(config.variable ?? "")}" start="${escapeXmlAttribute(config.start ?? "")}" end="${escapeXmlAttribute(config.end ?? "")}" step="${escapeXmlAttribute(config.step ?? "1")}">`
+          `${indent}<for variable="${escapeXmlAttribute(config.variable ?? "")}" start="${escapeXmlAttribute(config.start ?? "")}" end="${escapeXmlAttribute(config.end ?? "")}" step="${escapeXmlAttribute(config.step ?? "1")}" algoflow-inclusive="${includeEndText}">`
         );
         lines.push(...exportNodesToFlowgorithmXml(node.branches?.body ?? [], indentLevel + 1));
         lines.push(`${indent}</for>`);
@@ -1457,6 +1494,95 @@ const convertFlowgorithmOutputExpressionToTemplate = (expression) => {
   }).join("");
 };
 
+const inferImportedForStep = (forElement) => {
+  const rawStep = String(forElement.getAttribute("step") ?? "").trim();
+
+  const directionHint = String(
+    forElement.getAttribute("direction") ??
+    forElement.getAttribute("dir") ??
+    forElement.getAttribute("type") ??
+    ""
+  ).trim().toLowerCase();
+
+  const isDirectionNegative = [
+    "down",
+    "downto",
+    "desc",
+    "dec",
+    "decrement",
+    "decreasing",
+    "reverse",
+    "backward",
+  ].includes(directionHint);
+
+  const isDirectionPositive = [
+    "up",
+    "upto",
+    "asc",
+    "inc",
+    "increment",
+    "increasing",
+    "forward",
+  ].includes(directionHint);
+
+  if (rawStep) {
+    const numericStep = Number(rawStep);
+
+    if (Number.isFinite(numericStep) && numericStep !== 0) {
+      if (isDirectionNegative) {
+        return String(-Math.abs(numericStep));
+      }
+
+      if (isDirectionPositive) {
+        return String(Math.abs(numericStep));
+      }
+
+      return rawStep;
+    }
+
+    if (isDirectionNegative && !/^\s*-/.test(rawStep)) {
+      return `-(${rawStep})`;
+    }
+
+    return rawStep;
+  }
+
+  if (isDirectionNegative) {
+    return "-1";
+  }
+
+  if (isDirectionPositive) {
+    return "1";
+  }
+
+  const startValue = Number(String(forElement.getAttribute("start") ?? "").trim());
+  const endValue = Number(String(forElement.getAttribute("end") ?? "").trim());
+
+  if (Number.isFinite(startValue) && Number.isFinite(endValue) && startValue > endValue) {
+    return "-1";
+  }
+
+  return "1";
+};
+
+const inferImportedForIncludeEnd = (forElement) => {
+  const rawInclusive = String(
+    forElement.getAttribute("algoflow-inclusive") ??
+    forElement.getAttribute("inclusive") ??
+    ""
+  ).trim().toLowerCase();
+
+  if (!rawInclusive) {
+    return true;
+  }
+
+  if (["false", "0", "no", "off"].includes(rawInclusive)) {
+    return false;
+  }
+
+  return true;
+};
+
 const getDirectChildElement = (parentElement, tagName) =>
   Array.from(parentElement.children).find((child) => child.tagName === tagName) ?? null;
 
@@ -1490,10 +1616,19 @@ const importFlowgorithmSequence = (parentElement) =>
           value: element.getAttribute("variable") || "",
         };
       case "output":
+        {
+          const newlineAttribute = String(element.getAttribute("newline") ?? "").trim().toLowerCase();
+          const appendNewline = newlineAttribute
+            ? !["false", "0", "no", "off"].includes(newlineAttribute)
+            : true;
         return {
           type: "output",
           value: convertFlowgorithmOutputExpressionToTemplate(element.getAttribute("expression") || ""),
+          outputConfig: {
+            appendNewline,
+          },
         };
+        }
       case "comment":
         return {
           type: "comment",
@@ -1529,7 +1664,8 @@ const importFlowgorithmSequence = (parentElement) =>
             variable: element.getAttribute("variable") || "",
             start: element.getAttribute("start") || "",
             end: element.getAttribute("end") || "",
-            step: element.getAttribute("step") || "1",
+            step: inferImportedForStep(element),
+            includeEnd: inferImportedForIncludeEnd(element),
           },
           branches: {
             body: importFlowgorithmSequence(element),
@@ -1561,7 +1697,7 @@ if (node.type === "declare" && !node.declareConfig) {
 }
 
       if (node.type === "for" && !node.forConfig) {
-        node.forConfig = { variable: "", start: "", end: "", step: "1" };
+        node.forConfig = { variable: "", start: "", end: "", step: "1", includeEnd: true };
       }
 
       if (node.branches) {
@@ -2631,7 +2767,12 @@ const buildAlgoFlowPdfBytes = async () => {
 };
 
 const saveFlowchartState = () => {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(getPersistedFlowNodes()));
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(getPersistedFlowNodes()));
+  } catch {
+    // Ignore storage failures.
+  }
+
   saveHistoryState();
 };
 
@@ -2727,7 +2868,11 @@ const loadNodeLabelPreference = () => {
 };
 
 const saveNodeLabelPreference = () => {
-  window.localStorage.setItem(NODE_LABEL_PREFERENCE_KEY, String(showNodeTypeInLabel));
+  try {
+    window.localStorage.setItem(NODE_LABEL_PREFERENCE_KEY, String(showNodeTypeInLabel));
+  } catch {
+    // Ignore storage failures.
+  }
 };
 
 const getActiveMainViewId = () => {
@@ -2940,8 +3085,12 @@ const getNodeBodyText = (node) => {
   }
 
   if (node.type === "for" && node.forConfig) {
-    const { variable, start, end, step } = node.forConfig;
-    return buildForDisplayText({ variable, start, end, step });
+    const { variable, start, end, step, includeEnd } = node.forConfig;
+    return buildForDisplayText({ variable, start, end, step, includeEnd });
+  }
+
+  if (node.type === "output" && typeof node.value === "string") {
+    return node.value;
   }
 
   if (typeof node.value === "string" && node.value.trim()) {
@@ -3694,14 +3843,28 @@ const setRuntimeStatus = (label, { tone = "success", detail = label } = {}) => {
   runtimeState.statusDetail = detail;
 };
 
-const addConsoleEntry = (kind, text) => {
+const addConsoleEntry = (kind, text, options = {}) => {
   if (!runtimeState) {
+    return;
+  }
+
+  const appendNewline = options.appendNewline !== false;
+  const previousEntry = runtimeState.outputEntries[runtimeState.outputEntries.length - 1];
+
+  if (
+    kind === "output" &&
+    !appendNewline &&
+    previousEntry?.kind === "output" &&
+    previousEntry.appendNewline === false
+  ) {
+    previousEntry.text += String(text);
     return;
   }
 
   runtimeState.outputEntries.push({
     kind,
     text: String(text),
+    appendNewline,
   });
 };
 
@@ -4141,6 +4304,16 @@ const applyRuntimeInputValue = (targetReference, rawValue) => {
 
 const resolveRuntimeOutputValue = (text) => {
   const rawText = String(text ?? "");
+  const hasOuterWhitespace = rawText !== rawText.trim();
+
+  if (hasOuterWhitespace) {
+    if (outputPlaceholderPattern.test(rawText)) {
+      return resolveOutputTemplate(rawText);
+    }
+
+    return rawText;
+  }
+
   const rawReference = parseVariableReference(rawText);
 
   if (rawReference && runtimeState?.variableMeta.has(rawReference.variableName)) {
@@ -4382,7 +4555,9 @@ const executeRuntimeNodes = async (nodes) => {
         break;
       }
       case "output":
-        addConsoleEntry("output", resolveRuntimeOutputValue(node.value));
+        addConsoleEntry("output", resolveRuntimeOutputValue(node.value), {
+          appendNewline: node.outputConfig?.appendNewline !== false,
+        });
         break;
       case "if":
         await executeRuntimeNodes(
@@ -4409,33 +4584,50 @@ const executeRuntimeNodes = async (nodes) => {
       case "for": {
         const config = node.forConfig ?? {};
         const variableName = config.variable?.trim();
+        const includeEnd = config.includeEnd !== false;
         const startValue = evaluateRuntimeExpression(config.start ?? "");
         const endValue = evaluateRuntimeExpression(config.end ?? "");
         const stepValue = evaluateRuntimeExpression(config.step ?? "");
+        const numericStart = Number(startValue);
+        const numericEnd = Number(endValue);
         const numericStep = Number(stepValue);
 
         if (!variableName) {
           throw new Error("Nodo For incompleto: manca la variabile di controllo.");
         }
 
+        if (!Number.isFinite(numericStart) || !Number.isFinite(numericEnd)) {
+          throw new Error("Configurazione For non valida: inizio e fine devono essere numeri validi.");
+        }
+
         if (!Number.isFinite(numericStep) || numericStep === 0) {
           throw new Error("Configurazione For non valida: il passo deve essere un numero diverso da zero.");
         }
 
-        setRuntimeVariableValue(variableName, startValue);
+        setRuntimeVariableValue(variableName, numericStart);
 
-        while (
-          numericStep > 0
-            ? Number(runtimeState.variableValues.get(variableName)) < Number(endValue)
-            : Number(runtimeState.variableValues.get(variableName)) > Number(endValue)
-        ) {
+        while (true) {
+          const currentValue = Number(runtimeState.variableValues.get(variableName));
+
+          if (!Number.isFinite(currentValue)) {
+            throw new Error(`Configurazione For non valida: la variabile ${variableName} deve contenere un numero.`);
+          }
+
+          const shouldContinue = numericStep > 0
+            ? (includeEnd ? currentValue <= numericEnd : currentValue < numericEnd)
+            : (includeEnd ? currentValue >= numericEnd : currentValue > numericEnd);
+
+          if (!shouldContinue) {
+            break;
+          }
+
           await executeRuntimeNodes(node.branches?.body ?? []);
 
           if (runtimeState.cancelled) {
             throw new Error("__execution_cancelled__");
           }
 
-          const nextValue = Number(runtimeState.variableValues.get(variableName)) + numericStep;
+          const nextValue = currentValue + numericStep;
           setRuntimeVariableValue(variableName, nextValue);
         }
         break;
@@ -4578,6 +4770,10 @@ const getNodeDisplayText = (node) => {
 
   if (!bodyText) {
     return prefix.slice(0, -1);
+  }
+
+  if (node.type === "output") {
+    return `${prefix}${bodyText}`;
   }
 
   return `${prefix}${bodyText}`.trim();
@@ -5641,14 +5837,24 @@ const inferForStepDirection = (stepExpression) => {
   return "positive";
 };
 
-const buildForDisplayText = ({ variable, start, end, step }) => {
-  const comparator = inferForStepDirection(step) === "negative" ? ">" : "<";
+const getForComparator = (stepExpression, includeEnd = true) => {
+  const isNegative = inferForStepDirection(stepExpression) === "negative";
+
+  if (isNegative) {
+    return includeEnd ? ">=" : ">";
+  }
+
+  return includeEnd ? "<=" : "<";
+};
+
+const buildForDisplayText = ({ variable, start, end, step, includeEnd = true }) => {
+  const comparator = getForComparator(step, includeEnd);
   return `${variable} = ${start} to ${comparator} ${end} step ${step}`.replace(/\s+/g, " ").trim();
 };
 
-const buildForLoopHeader = ({ variableName, start, end, step }) => {
+const buildForLoopHeader = ({ variableName, start, end, step, includeEnd = true }) => {
   const direction = inferForStepDirection(step);
-  const comparator = direction === "negative" ? ">" : "<";
+  const comparator = getForComparator(step, includeEnd);
 
   let update = `${variableName} += ${step}`;
 
@@ -5876,19 +6082,21 @@ const getCOutputPlaceholder = (expression, variables) => {
   return { format: "%g", argument: normalizedExpression };
 };
 
-const getCodegenOutputLine = (template, language, variables) => {
+const getCodegenOutputLine = (template, language, variables, appendNewline = true) => {
   const rawTemplate = String(template ?? "");
   const placeholderPattern = /\{([^{}]+)\}/g;
+  const hasOuterWhitespace = rawTemplate !== rawTemplate.trim();
+  const containsPlaceholder = outputPlaceholderPattern.test(rawTemplate);
 
-  if (shouldTreatOutputAsExpression(rawTemplate, variables)) {
+  if (!hasOuterWhitespace && !containsPlaceholder && shouldTreatOutputAsExpression(rawTemplate, variables)) {
     const expression = normalizeExpressionForLanguage(rawTemplate, language) || JSON.stringify(rawTemplate);
 
     if (language === "python") {
-      return `print(${expression})`;
+      return appendNewline ? `print(${expression})` : `print(${expression}, end="")`;
     }
 
     if (language === "cpp") {
-      return `cout << ${expression} << endl;`;
+      return appendNewline ? `cout << ${expression} << endl;` : `cout << ${expression};`;
     }
 
     const trimmedExpression = rawTemplate.trim();
@@ -5898,27 +6106,30 @@ const getCodegenOutputLine = (template, language, variables) => {
     const isIndexedStringAccess = /^[A-Za-z_][A-Za-z0-9_]*\s*\[.*\]$/.test(trimmedExpression);
     const looksBoolean = /^(true|false|\(|!|not\b|.*(?:==|!=|<=|>=|<|>|&&|\|\|).*)$/i.test(trimmedExpression);
 
-    let formatLiteral = '"%g\\n"';
+    const newlineSuffix = appendNewline ? "\\n" : "";
+    let formatLiteral = `"%g${newlineSuffix}"`;
     let argument = expression;
 
     if (looksBoolean) {
-      formatLiteral = '"%s\\n"';
+      formatLiteral = `"%s${newlineSuffix}"`;
       argument = `((${expression}) ? "true" : "false")`;
     } else if (isIndexedStringAccess || isQuotedCharLiteral) {
-      formatLiteral = '"%c\\n"';
+      formatLiteral = `"%c${newlineSuffix}"`;
     } else if (isQuotedStringLiteral || expressionVariableMeta?.dataType === "String") {
-      formatLiteral = '"%s\\n"';
+      formatLiteral = `"%s${newlineSuffix}"`;
     } else if (expressionVariableMeta?.dataType === "Integer") {
-      formatLiteral = '"%d\\n"';
+      formatLiteral = `"%d${newlineSuffix}"`;
     } else if (expressionVariableMeta?.dataType === "Real") {
-      formatLiteral = '"%g\\n"';
+      formatLiteral = `"%g${newlineSuffix}"`;
     }
 
     return `printf(${formatLiteral}, ${argument});`;
   }
 
   if (language === "python") {
-    return `print(${getPythonFStringLiteral(rawTemplate)})`;
+    return appendNewline
+      ? `print(${getPythonFStringLiteral(rawTemplate)})`
+      : `print(${getPythonFStringLiteral(rawTemplate)}, end="")`;
   }
 
   const segments = [];
@@ -5948,7 +6159,9 @@ const getCodegenOutputLine = (template, language, variables) => {
         ? JSON.stringify(segment.value)
         : (normalizeExpressionForLanguage(segment.value, "cpp") || segment.value)
     );
-    return `cout << ${cppParts.join(" << ")} << endl;`;
+    return appendNewline
+      ? `cout << ${cppParts.join(" << ")} << endl;`
+      : `cout << ${cppParts.join(" << ")};`;
   }
 
   const formatParts = [];
@@ -5965,7 +6178,7 @@ const getCodegenOutputLine = (template, language, variables) => {
     argumentsList.push(placeholder.argument);
   });
 
-  const formatLiteral = `"${formatParts.join("")}\\n"`;
+  const formatLiteral = `"${formatParts.join("")}${appendNewline ? "\\n" : ""}"`;
   return argumentsList.length > 0
     ? `printf(${formatLiteral}, ${argumentsList.join(", ")});`
     : `printf(${formatLiteral});`;
@@ -6013,7 +6226,14 @@ const generateCodeLinesForNodes = (nodes, language, indentLevel, variables) => {
         pushCodeLine(lines, indentCodeLine(indentLevel, getCodegenInputLine(String(node.value ?? "").trim(), language, variables)), node.id);
         break;
       case "output":
-        pushCodeLine(lines, indentCodeLine(indentLevel, getCodegenOutputLine(node.value, language, variables)), node.id);
+        pushCodeLine(
+          lines,
+          indentCodeLine(
+            indentLevel,
+            getCodegenOutputLine(node.value, language, variables, node.outputConfig?.appendNewline !== false)
+          ),
+          node.id
+        );
         break;
       case "comment": {
         const commentLines = getCodegenCommentLine(node.value, language).split("\n");
@@ -6076,17 +6296,21 @@ const generateCodeLinesForNodes = (nodes, language, indentLevel, variables) => {
         const start = normalizeExpressionForLanguage(config.start, language) || "0";
         const end = normalizeExpressionForLanguage(config.end, language) || "0";
         const step = normalizeExpressionForLanguage(config.step, language) || "1";
+        const includeEnd = config.includeEnd !== false;
         const body = node.branches?.body ?? [];
 
         if (language === "python") {
-          pushCodeLine(lines, indentCodeLine(indentLevel, `for ${variableName} in range(${start}, ${end}, ${step}):`), node.id);
+          const pythonEnd = includeEnd
+            ? `(${end}) + (1 if (${step}) > 0 else -1)`
+            : end;
+          pushCodeLine(lines, indentCodeLine(indentLevel, `for ${variableName} in range(${start}, ${pythonEnd}, ${step}):`), node.id);
           lines.push(...(body.length > 0 ? generateCodeLinesForNodes(body, language, indentLevel + 1, variables) : [{ text: indentCodeLine(indentLevel + 1, "pass"), nodeId: null }]));
           break;
         }
 
         pushCodeLine(lines, indentCodeLine(
           indentLevel,
-          buildForLoopHeader({ variableName, start, end, step })
+          buildForLoopHeader({ variableName, start, end, step, includeEnd })
         ), node.id);
         lines.push(...generateCodeLinesForNodes(body, language, indentLevel + 1, variables));
         pushCodeLine(lines, indentCodeLine(indentLevel, "}"));
@@ -6327,6 +6551,7 @@ const openPropertyDialog = (nodeId) => {
   const isDeclare = node.type === "declare";
   const isAssign = node.type === "assign";
   const isFor = node.type === "for";
+  const isOutput = node.type === "output";
   const isLongText = node.type === "output" || node.type === "comment";
 
   genericPropertyField.hidden = isDeclare || isFor;
@@ -6334,6 +6559,9 @@ const openPropertyDialog = (nodeId) => {
   propertyInput.dataset.autosize = String(isLongText);
   declareFields.hidden = !isDeclare;
   forFields.hidden = !isFor;
+  if (outputFields) {
+    outputFields.hidden = !isOutput;
+  }
   mountAssignSuggestions();
 
   if (isAssign) {
@@ -6375,13 +6603,27 @@ const openPropertyDialog = (nodeId) => {
       start: "",
       end: "",
       step: "",
+      includeEnd: true,
     };
 
     forVariableInput.value = forConfig.variable;
     forStartInput.value = forConfig.start;
     forEndInput.value = forConfig.end;
     forStepInput.value = forConfig.step;
+    if (forIncludeEndInput) {
+      forIncludeEndInput.checked = forConfig.includeEnd !== false;
+    }
   }
+
+  if (isOutput && outputNewlineInput) {
+    outputNewlineInput.checked = node.outputConfig?.appendNewline !== false;
+  }
+
+  if (outputQuotedPreview) {
+    outputQuotedPreview.hidden = !isOutput;
+  }
+
+  syncOutputQuotedPreview();
 
   propertyDialogBackdrop.hidden = false;
   document.body.style.overflow = "hidden";
@@ -6601,6 +6843,7 @@ const finalizeNode = () => {
     const start = forStartInput.value.trim();
     const end = forEndInput.value.trim();
     const step = forStepInput.value.trim();
+    const includeEnd = forIncludeEndInput ? forIncludeEndInput.checked : true;
 
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(variable)) {
       showPropertyError("La variabile del for deve essere un identificatore valido.");
@@ -6621,8 +6864,14 @@ const finalizeNode = () => {
     }
 
     hidePropertyError();
-    node.forConfig = { variable, start, end, step };
-    node.value = buildForDisplayText({ variable, start, end, step });
+    node.forConfig = { variable, start, end, step, includeEnd };
+    node.value = buildForDisplayText({ variable, start, end, step, includeEnd });
+  } else if (node.type === "output") {
+    hidePropertyError();
+    node.value = propertyInput.value;
+    node.outputConfig = {
+      appendNewline: outputNewlineInput ? outputNewlineInput.checked : true,
+    };
   } else {
     hidePropertyError();
     node.value = propertyInput.value.trim();
@@ -6676,6 +6925,13 @@ const insertNode = (type) => {
       start: "",
       end: "",
       step: "",
+      includeEnd: true,
+    };
+  }
+
+  if (type === "output") {
+    newNode.outputConfig = {
+      appendNewline: true,
     };
   }
 
@@ -7104,6 +7360,7 @@ if (propertyInput) {
 
   propertyInput.addEventListener("input", () => {
     syncPropertyInputSize();
+    syncOutputQuotedPreview();
 
     if (propertyDialogBackdrop.hidden || !isEditingAssignNode()) {
       hideAssignSuggestions();
