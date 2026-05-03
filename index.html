@@ -146,16 +146,25 @@
                   </label>
 
                   <div class="output-fields" id="output-fields" hidden>
+                    <label class="property-field" for="output-quoted-text">
+                      <span>Testo Output</span>
+                    </label>
+
+                    <div class="output-quoted-preview" id="output-quoted-preview" aria-hidden="false">
+                      <div
+                        class="output-quoted-text"
+                        id="output-quoted-text"
+                        contenteditable="true"
+                        role="textbox"
+                        aria-multiline="true"
+                        aria-label="Testo output"
+                      ></div>
+                    </div>
+
                     <label class="checkbox-option">
                       <input type="checkbox" id="output-newline-input" checked>
                       <span>A capo dopo Output</span>
                     </label>
-
-                    <div class="output-quoted-preview" id="output-quoted-preview" aria-hidden="true">
-                      <span class="output-quoted-mark">"</span>
-                      <span class="output-quoted-text" id="output-quoted-text"></span>
-                      <span class="output-quoted-mark">"</span>
-                    </div>
                   </div>
 
                   <div class="declare-fields" id="declare-fields" hidden>

@@ -357,7 +357,40 @@ const syncOutputQuotedPreview = () => {
   }
 
   const outputValue = String(propertyInput.value ?? "");
-  outputQuotedText.textContent = outputValue || " ";
+  outputQuotedText.textContent = outputValue || "\u200B";
+};
+
+const getOutputQuotedEditorValue = () => {
+  if (!outputQuotedText) {
+    return "";
+  }
+
+  const normalizedValue = String(outputQuotedText.innerText ?? "")
+    .replace(/\r/g, "")
+    .replace(/\u00A0/g, " ")
+    .replace(/\u200B/g, "");
+
+  return normalizedValue === "\n" ? "" : normalizedValue;
+};
+
+const focusOutputQuotedEditorAtEnd = () => {
+  if (!outputQuotedText) {
+    return;
+  }
+
+  outputQuotedText.focus();
+
+  const selection = window.getSelection();
+
+  if (!selection) {
+    return;
+  }
+
+  const range = document.createRange();
+  range.selectNodeContents(outputQuotedText);
+  range.collapse(false);
+  selection.removeAllRanges();
+  selection.addRange(range);
 };
 
 const getStructuredBranchKeys = (type) => {
@@ -3643,6 +3676,11 @@ const isEditingForNode = () => {
   return node?.type === "for";
 };
 
+const isEditingOutputNode = () => {
+  const node = findNodeById(editingNodeId);
+  return node?.type === "output";
+};
+
 const mountAssignSuggestions = () => {
   if (!assignSuggestions) {
     return;
@@ -3853,11 +3891,11 @@ const addConsoleEntry = (kind, text, options = {}) => {
 
   if (
     kind === "output" &&
-    !appendNewline &&
     previousEntry?.kind === "output" &&
     previousEntry.appendNewline === false
   ) {
     previousEntry.text += String(text);
+    previousEntry.appendNewline = appendNewline;
     return;
   }
 
@@ -6554,7 +6592,7 @@ const openPropertyDialog = (nodeId) => {
   const isOutput = node.type === "output";
   const isLongText = node.type === "output" || node.type === "comment";
 
-  genericPropertyField.hidden = isDeclare || isFor;
+  genericPropertyField.hidden = isDeclare || isFor || isOutput;
   genericPropertyField.classList.toggle("is-output", isLongText);
   propertyInput.dataset.autosize = String(isLongText);
   declareFields.hidden = !isDeclare;
@@ -6623,7 +6661,9 @@ const openPropertyDialog = (nodeId) => {
     outputQuotedPreview.hidden = !isOutput;
   }
 
-  syncOutputQuotedPreview();
+  if (isOutput) {
+    syncOutputQuotedPreview();
+  }
 
   propertyDialogBackdrop.hidden = false;
   document.body.style.overflow = "hidden";
@@ -6637,6 +6677,8 @@ const openPropertyDialog = (nodeId) => {
     } else if (isFor) {
       forVariableInput.focus();
       forVariableInput.select();
+    } else if (isOutput) {
+      focusOutputQuotedEditorAtEnd();
     } else {
       propertyInput.focus();
       propertyInput.select();
@@ -7360,7 +7402,6 @@ if (propertyInput) {
 
   propertyInput.addEventListener("input", () => {
     syncPropertyInputSize();
-    syncOutputQuotedPreview();
 
     if (propertyDialogBackdrop.hidden || !isEditingAssignNode()) {
       hideAssignSuggestions();
@@ -7374,6 +7415,44 @@ if (propertyInput) {
     window.setTimeout(() => {
       hideAssignSuggestions();
     }, 120);
+  });
+}
+
+if (outputQuotedText) {
+  outputQuotedText.addEventListener("input", () => {
+    if (propertyDialogBackdrop.hidden || !isEditingOutputNode()) {
+      return;
+    }
+
+    propertyInput.value = getOutputQuotedEditorValue();
+  });
+
+  outputQuotedText.addEventListener("paste", (event) => {
+    if (!isEditingOutputNode()) {
+      return;
+    }
+
+    event.preventDefault();
+    const text = event.clipboardData?.getData("text/plain") ?? "";
+
+    if (document.queryCommandSupported("insertText")) {
+      document.execCommand("insertText", false, text);
+      return;
+    }
+
+    const selection = window.getSelection();
+
+    if (!selection || selection.rangeCount === 0) {
+      outputQuotedText.textContent += text;
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    range.deleteContents();
+    range.insertNode(document.createTextNode(text));
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
   });
 }
 

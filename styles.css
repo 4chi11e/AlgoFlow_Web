@@ -1235,28 +1235,46 @@ button:disabled {
 }
 
 .output-quoted-preview {
-  display: flex;
-  align-items: flex-start;
-  gap: 3px;
+  display: block;
   padding: 0.7rem 0.85rem;
   border: 1px dashed rgba(74, 58, 43, 0.25);
   border-radius: 12px;
   background: rgba(255, 251, 246, 0.72);
-  font-family: "Space Grotesk", sans-serif;
-  font-size: 0.95rem;
-  line-height: 1.4;
-}
-
-.output-quoted-mark {
-  color: var(--primary);
-  font-weight: 700;
-  user-select: none;
 }
 
 .output-quoted-text {
+  display: inline-block;
+  max-width: 100%;
+  min-width: 1ch;
+  font-family: "Manrope", sans-serif;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: var(--text);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  min-height: 1.1em;
+  min-height: 3.2em;
+  caret-color: var(--text);
+  outline: none;
+}
+
+.output-quoted-text::before,
+.output-quoted-text::after {
+  font-family: "Space Grotesk", sans-serif;
+  font-weight: 700;
+  color: var(--primary);
+  user-select: none;
+}
+
+.output-quoted-text::before {
+  content: '“';
+}
+
+.output-quoted-text::after {
+  content: '”';
+}
+
+.output-quoted-text:focus {
+  outline: none;
 }
 
 .for-fields-grid {
@@ -2257,12 +2275,13 @@ button:disabled {
   border-color: rgba(255, 255, 255, 0.2);
 }
 
-:root[data-theme="dark"] .output-quoted-mark {
-  color: #ffb07d;
-}
-
 :root[data-theme="dark"] .output-quoted-text {
   color: #f2f6fc;
+}
+
+:root[data-theme="dark"] .output-quoted-text::before,
+:root[data-theme="dark"] .output-quoted-text::after {
+  color: #ffb07d;
 }
 
 :root[data-theme="dark"] .assign-suggestion:hover,
