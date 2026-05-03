@@ -1,12 +1,14 @@
 const mainTabs = document.querySelectorAll(".folder-tab");
 const mainViews = document.querySelectorAll(".main-view");
 const languageTabs = document.querySelectorAll(".language-tab");
+const mobileSidebarTabs = document.querySelectorAll(".mobile-sidebar-tab");
 const appShell = document.querySelector(".app-shell");
 const workspace = document.querySelector(".workspace");
 const workspaceResizer = document.querySelector("#workspace-resizer");
 const sidebarContent = document.querySelector(".sidebar-content");
 const sidebarResizer = document.querySelector("#sidebar-resizer");
 const variablesSection = document.querySelector(".variables-section");
+const terminalSection = document.querySelector(".terminal-section");
 const newDiagramButton = document.querySelector("#new-diagram-button");
 const loadDiagramButton = document.querySelector("#load-diagram-button");
 const saveDiagramButton = document.querySelector("#save-diagram-button");
@@ -82,6 +84,7 @@ const ALGOFLOW_PICKER_STORE_NAME = "handles";
 const ALGOFLOW_PICKER_HANDLE_KEY = "last-handle";
 const ALGOFLOW_PDF_PAYLOAD_BEGIN = "ALGOFLOW_PAYLOAD_BEGIN";
 const ALGOFLOW_PDF_PAYLOAD_END = "ALGOFLOW_PAYLOAD_END";
+const COMPACT_LAYOUT_BREAKPOINT = 1000;
 const NOT_YET_IMPLEMENTED_MESSAGE = "Questa funzione al momento non è utilizzabile perché non è ancora stata sviluppata.";
 
 const nodeDefinitions = {
@@ -215,6 +218,9 @@ let selectedCodeLanguage = "c";
 let currentTheme = "light";
 let isDiagramFocusMode = false;
 let mainViewBeforeFocusMode = null;
+let mobileSidebarView = "terminal";
+let pendingLayoutAwareRenderFrame = null;
+let currentDiagramZoomPreset = null;
 
 const RUNTIME_UNDECLARED = Symbol("runtime-undeclared");
 const MAX_RUNTIME_OPERATIONS = 10000;
@@ -223,6 +229,11 @@ const SUPPORTED_ASSIGNMENT_OPERATORS = new Set(["=", "+=", "-=", "*=", "/=", "%=
 const MIN_DIAGRAM_ZOOM = 0.18;
 const MAX_DIAGRAM_ZOOM = 2.8;
 const DIAGRAM_ZOOM_STEP = 0.1;
+const DIAGRAM_ZOOM_PRESETS = {
+  desktop: 1,
+  compact: 0.88,
+  phone: 0.74,
+};
 
 const applyDiagramZoom = () => {
   if (!flowchartRoot) {
@@ -244,6 +255,31 @@ const applyDiagramZoom = () => {
   }
 
   diagramSvg.style.width = `${diagramZoom * 100}%`;
+};
+
+const getCurrentDiagramZoomPreset = () => {
+  if (window.innerWidth <= 630) {
+    return "phone";
+  }
+
+  if (window.innerWidth <= COMPACT_LAYOUT_BREAKPOINT) {
+    return "compact";
+  }
+
+  return "desktop";
+};
+
+const syncResponsiveDiagramZoom = (options = {}) => {
+  const { force = false } = options;
+  const nextPreset = getCurrentDiagramZoomPreset();
+
+  if (!force && currentDiagramZoomPreset === nextPreset) {
+    return;
+  }
+
+  currentDiagramZoomPreset = nextPreset;
+  diagramZoom = DIAGRAM_ZOOM_PRESETS[nextPreset] ?? 1;
+  applyDiagramZoom();
 };
 
 const hideInsertDialogNotice = () => {
@@ -2619,6 +2655,42 @@ const setDiagramFocusMode = (nextValue) => {
   renderFlowchart();
 };
 
+const syncMobileSidebarView = () => {
+  const isMobile = window.innerWidth <= COMPACT_LAYOUT_BREAKPOINT;
+
+  mobileSidebarTabs.forEach((tab) => {
+    const isActive = tab.dataset.sidebarTarget === mobileSidebarView;
+    tab.classList.toggle("is-active", isActive);
+    tab.setAttribute("aria-selected", String(isActive));
+  });
+
+  if (!variablesSection || !terminalSection) {
+    return;
+  }
+
+  if (!isMobile) {
+    variablesSection.classList.remove("is-mobile-hidden");
+    terminalSection.classList.remove("is-mobile-hidden");
+    return;
+  }
+
+  variablesSection.classList.toggle("is-mobile-hidden", mobileSidebarView !== "variables");
+  terminalSection.classList.toggle("is-mobile-hidden", mobileSidebarView !== "terminal");
+};
+
+const scheduleLayoutAwareRender = () => {
+  if (pendingLayoutAwareRenderFrame !== null) {
+    cancelAnimationFrame(pendingLayoutAwareRenderFrame);
+  }
+
+  pendingLayoutAwareRenderFrame = requestAnimationFrame(() => {
+    pendingLayoutAwareRenderFrame = requestAnimationFrame(() => {
+      pendingLayoutAwareRenderFrame = null;
+      renderFlowchart();
+    });
+  });
+};
+
 const loadCodeLanguagePreference = () => {
   try {
     const storedValue = window.localStorage.getItem(CODE_LANGUAGE_PREFERENCE_KEY);
@@ -2644,7 +2716,7 @@ const syncThemeToggleButton = () => {
   }
 
   const isDark = currentTheme === "dark";
-  themeToggleButton.textContent = isDark ? "Tema chiaro" : "Tema scuro";
+  themeToggleButton.textContent = isDark ? "Light" : "Dark";
   themeToggleButton.title = isDark ? "Passa al tema chiaro" : "Passa al tema scuro";
 };
 
@@ -2747,6 +2819,19 @@ languageTabs.forEach((tab) => {
     saveCodeLanguagePreference();
     syncCodeLanguageTabs();
     renderCodePreview();
+  });
+});
+
+mobileSidebarTabs.forEach((tab) => {
+  tab.addEventListener("click", () => {
+    const target = tab.dataset.sidebarTarget;
+
+    if (!target || target === mobileSidebarView) {
+      return;
+    }
+
+    mobileSidebarView = target === "variables" ? "variables" : "terminal";
+    syncMobileSidebarView();
   });
 });
 
@@ -4194,46 +4279,46 @@ const createNodeMarkup = (node) => {
   `;
 };
 
-const SVG_CANVAS_MIN_WIDTH = 1040;
-const SVG_TOP_PADDING = 48;
-const SVG_BOTTOM_PADDING = 48;
-const SVG_CONNECTOR_HEIGHT = 48;
-const SVG_TERMINAL_WIDTH = 170;
-const SVG_TERMINAL_HEIGHT = 64;
-const SVG_BRANCH_OFFSET_X = 280;
+const SVG_CANVAS_MIN_WIDTH = 940;
+const SVG_TOP_PADDING = 40;
+const SVG_BOTTOM_PADDING = 40;
+const SVG_CONNECTOR_HEIGHT = 42;
+const SVG_TERMINAL_WIDTH = 154;
+const SVG_TERMINAL_HEIGHT = 58;
+const SVG_BRANCH_OFFSET_X = 252;
 const SVG_IF_LABEL_OFFSET_X = 28;
 const SVG_BRANCH_LABEL_OFFSET_Y = 10;
-const SVG_BRANCH_MIN_HEIGHT = 88;
-const SVG_MERGE_RADIUS = 14;
-const SVG_NESTED_BRANCH_OFFSET_X = 220;
-const SVG_IF_BRANCH_ENTRY_HEIGHT = 36;
-const SVG_IF_BRANCH_EXIT_GAP = 20;
-const SVG_LOOP_BRANCH_OFFSET_X = 250;
-const SVG_LOOP_NESTED_BRANCH_OFFSET_X = 205;
-const SVG_LOOP_BRANCH_ENTRY_HEIGHT = 34;
-const SVG_LOOP_BRANCH_EXIT_GAP = 18;
-const SVG_LOOP_BRANCH_MIN_HEIGHT = 84;
-const SVG_WHILE_RETURN_OFFSET_X = 30;
-const SVG_WHILE_RETURN_DESCENT = 18;
+const SVG_BRANCH_MIN_HEIGHT = 80;
+const SVG_MERGE_RADIUS = 12;
+const SVG_NESTED_BRANCH_OFFSET_X = 198;
+const SVG_IF_BRANCH_ENTRY_HEIGHT = 32;
+const SVG_IF_BRANCH_EXIT_GAP = 18;
+const SVG_LOOP_BRANCH_OFFSET_X = 224;
+const SVG_LOOP_NESTED_BRANCH_OFFSET_X = 186;
+const SVG_LOOP_BRANCH_ENTRY_HEIGHT = 30;
+const SVG_LOOP_BRANCH_EXIT_GAP = 16;
+const SVG_LOOP_BRANCH_MIN_HEIGHT = 76;
+const SVG_WHILE_RETURN_OFFSET_X = 26;
+const SVG_WHILE_RETURN_DESCENT = 16;
 const SVG_WHILE_FALSE_LABEL_OFFSET_X = 18;
 const SVG_WHILE_FALSE_LABEL_OFFSET_Y = 22;
-const SVG_DO_BODY_ENTRY_HEIGHT = 24;
-const SVG_DO_CONDITION_GAP = 34;
-const SVG_DO_LOOP_OFFSET_X = 220;
-const SVG_DO_EXIT_GAP = 20;
+const SVG_DO_BODY_ENTRY_HEIGHT = 22;
+const SVG_DO_CONDITION_GAP = 30;
+const SVG_DO_LOOP_OFFSET_X = 198;
+const SVG_DO_EXIT_GAP = 18;
 
-const SVG_NODE_TEXT_CHAR_WIDTH = 8.6;
-const SVG_NODE_LINE_HEIGHT = 22;
-const SVG_NODE_HORIZONTAL_PADDING = 34;
-const SVG_NODE_VERTICAL_PADDING = 18;
+const SVG_NODE_TEXT_CHAR_WIDTH = 8.2;
+const SVG_NODE_LINE_HEIGHT = 20;
+const SVG_NODE_HORIZONTAL_PADDING = 28;
+const SVG_NODE_VERTICAL_PADDING = 14;
 
 const SVG_NODE_SIZE_PRESETS = {
-  if: { minWidth: 220, maxWidth: 400, minHeight: 108 },
-  while: { minWidth: 210, maxWidth: 380, minHeight: 74 },
-  for: { minWidth: 210, maxWidth: 380, minHeight: 74 },
-  do: { minWidth: 210, maxWidth: 380, minHeight: 74 },
-  comment: { minWidth: 220, maxWidth: 520, minHeight: 44 },
-  default: { minWidth: 180, maxWidth: 360, minHeight: 58 },
+  if: { minWidth: 204, maxWidth: 372, minHeight: 96 },
+  while: { minWidth: 194, maxWidth: 352, minHeight: 68 },
+  for: { minWidth: 194, maxWidth: 352, minHeight: 68 },
+  do: { minWidth: 194, maxWidth: 352, minHeight: 68 },
+  comment: { minWidth: 204, maxWidth: 480, minHeight: 40 },
+  default: { minWidth: 168, maxWidth: 336, minHeight: 52 },
 };
 
 let svgNodeMeasurementRoot = null;
@@ -6427,6 +6512,16 @@ if (themeToggleButton) {
   });
 }
 
+window.addEventListener("resize", () => {
+  syncResponsiveDiagramZoom();
+  syncMobileSidebarView();
+  scheduleLayoutAwareRender();
+});
+
+window.addEventListener("load", () => {
+  scheduleLayoutAwareRender();
+});
+
 document.addEventListener("keydown", (event) => {
   if (!propertyDialogBackdrop.hidden) {
     return;
@@ -6524,7 +6619,10 @@ loadHistoryState();
 loadCodeLanguagePreference();
 syncCodeLanguageTabs();
 syncFocusModeButton();
+syncMobileSidebarView();
+syncResponsiveDiagramZoom({ force: true });
 setActiveMainView(loadMainViewPreference());
 renderFlowchart();
+scheduleLayoutAwareRender();
 scheduleFontAwareRender();
 syncExecutionControls();
