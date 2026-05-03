@@ -1,3 +1,6 @@
 # Cose ancora da fare
 
-- per ora nulla
+- sistemare interfaccia mobile:
+  - cancellare, copiare blocchi
+  - selezione multipla
+  - rimpicciolire finestre
