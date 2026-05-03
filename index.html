@@ -145,6 +145,28 @@
                     <div class="assign-suggestions" id="assign-suggestions" hidden></div>
                   </label>
 
+                  <div class="output-fields" id="output-fields" hidden>
+                    <label class="property-field" for="output-quoted-text">
+                      <span>Testo Output</span>
+                    </label>
+
+                    <div class="output-quoted-preview" id="output-quoted-preview" aria-hidden="false">
+                      <div
+                        class="output-quoted-text"
+                        id="output-quoted-text"
+                        contenteditable="true"
+                        role="textbox"
+                        aria-multiline="true"
+                        aria-label="Testo output"
+                      ></div>
+                    </div>
+
+                    <label class="checkbox-option">
+                      <input type="checkbox" id="output-newline-input" checked>
+                      <span>A capo dopo Output</span>
+                    </label>
+                  </div>
+
                   <div class="declare-fields" id="declare-fields" hidden>
                     <label class="property-field">
                       <span>Variable Names:</span>
@@ -172,11 +194,16 @@
                         </label>
                       </fieldset>
 
-                      <label class="checkbox-option is-disabled" id="declare-array-option" aria-disabled="true">
+                      <label class="checkbox-option" id="declare-array-option">
                         <input type="checkbox" id="declare-array-input">
                         <span>Array?</span>
                       </label>
                     </div>
+
+                    <label class="property-field" id="declare-array-length-field" hidden>
+                      <span>Array Length:</span>
+                      <input type="number" id="declare-array-length-input" min="1" step="1" inputmode="numeric">
+                    </label>
                   </div>
 
                   <div class="for-fields" id="for-fields" hidden>
@@ -192,7 +219,7 @@
                       </label>
 
                       <label class="property-field">
-                        <span>Valore finale escluso:</span>
+                        <span>Valore finale:</span>
                         <input type="text" id="for-end-input" autocomplete="off">
                       </label>
 
@@ -201,6 +228,11 @@
                         <input type="text" id="for-step-input" autocomplete="off">
                       </label>
                     </div>
+
+                    <label class="checkbox-option">
+                      <input type="checkbox" id="for-include-end-input" checked>
+                      <span>Includi valore finale (<= oppure >=)</span>
+                    </label>
                   </div>
 
                   <div class="property-dialog-actions">
