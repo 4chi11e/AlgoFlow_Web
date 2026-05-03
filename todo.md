@@ -1,8 +1,7 @@
 # Cose ancora da fare
 
-- quando esporta in pdf il testo dentro i nodi non va a capo
-- implementare gli array
+- PDF, ancora non mi avvisa quando non riesce a salvare perchè il file è già aperto
 - copia e incolla dei blocchi
+- implementare gli array
 - lavorare alla versione mobile
-- migliorare la textbox per i commenti
 - migliorare struttura degli if innestati

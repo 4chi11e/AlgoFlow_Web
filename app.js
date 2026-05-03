@@ -1351,6 +1351,57 @@ const downloadBlobAsFile = (blob, fileName) => {
   }, 0);
 };
 
+const getAlgoFlowSaveError = (error) => {
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return error;
+  }
+
+  const rawMessage = error instanceof Error ? error.message : String(error ?? "");
+  const normalizedMessage = rawMessage.toLowerCase();
+
+  if (
+    normalizedMessage.includes("access denied") ||
+    normalizedMessage.includes("permission denied") ||
+    normalizedMessage.includes("being used by another process") ||
+    normalizedMessage.includes("used by another process") ||
+    normalizedMessage.includes("process cannot access the file") ||
+    normalizedMessage.includes("the requested file could not be locked") ||
+    normalizedMessage.includes("locked")
+  ) {
+    return new Error("Impossibile salvare il file perché è già aperto o bloccato da un altro programma. Chiudilo e riprova.");
+  }
+
+  if (error instanceof Error && rawMessage.trim()) {
+    return error;
+  }
+
+  return new Error("Impossibile completare il salvataggio.");
+};
+
+const buildAlgoFlowSavePayload = async (format) => {
+  if (format === "pdf") {
+    const bytes = await buildAlgoFlowPdfBytes();
+    return {
+      format,
+      data: bytes,
+    };
+  }
+
+  if (format === "fprg") {
+    const text = buildFlowgorithmXmlDocument();
+    return {
+      format,
+      data: text,
+    };
+  }
+
+  const text = JSON.stringify(buildAlgoFlowFileDocument(), null, 2);
+  return {
+    format: "json",
+    data: text,
+  };
+};
+
 const exportFlowchartWithPicker = async () => {
   if (typeof window.showSaveFilePicker === "function") {
     const pickerOptions = await buildAlgoFlowSavePickerOptions();
@@ -1359,18 +1410,34 @@ const exportFlowchartWithPicker = async () => {
       suggestedName: getSuggestedPdfFileName(),
     });
     const selectedFormat = getSaveFormatFromHandle(fileHandle, pickerOptions.types);
-    const writable = await fileHandle.createWritable();
+    const payload = await buildAlgoFlowSavePayload(selectedFormat);
+
+    if (selectedFormat === "pdf") {
+      try {
+        const existingFile = await fileHandle.getFile();
+
+        if (existingFile.size > 0) {
+          window.alert("Stai sovrascrivendo un PDF esistente. Se è aperto in un altro programma, il salvataggio potrebbe non riuscire: chiudilo prima di continuare.");
+        }
+      } catch {
+        // Ignore missing file / unreadable pre-checks.
+      }
+    }
+
+    let writable;
 
     try {
-      if (selectedFormat === "pdf") {
-        await writable.write(await buildAlgoFlowPdfBytes());
-      } else if (selectedFormat === "fprg") {
-        await writable.write(buildFlowgorithmXmlDocument());
-      } else {
-        await writable.write(JSON.stringify(buildAlgoFlowFileDocument(), null, 2));
-      }
-    } finally {
+      writable = await fileHandle.createWritable();
+      await writable.write(payload.data);
       await writable.close();
+    } catch (error) {
+      try {
+        await writable?.abort?.();
+      } catch {
+        // Ignore abort failures after a write error.
+      }
+
+      throw getAlgoFlowSaveError(error);
     }
 
     await saveLastAlgoFlowPickerHandle(fileHandle).catch(() => {});
@@ -1598,9 +1665,66 @@ const collectDocumentStylesForPdfSvg = () => {
 
 const simplifySvgLabelsForPdf = (printableSvg) => {
   const svgNamespace = "http://www.w3.org/2000/svg";
+  const measurementCanvas = document.createElement("canvas");
+  const measurementContext = measurementCanvas.getContext("2d");
+
+  const measureTextWidth = (text, font) => {
+    if (!measurementContext) {
+      return text.length * 8;
+    }
+
+    measurementContext.font = font;
+    return measurementContext.measureText(text).width;
+  };
+
+  const wrapTextLines = (text, maxWidth, font) => {
+    const paragraphs = String(text ?? "").split("\n");
+    const lines = [];
+
+    paragraphs.forEach((paragraph) => {
+      const words = paragraph.split(/\s+/).filter(Boolean);
+
+      if (words.length === 0) {
+        lines.push("");
+        return;
+      }
+
+      let currentLine = "";
+
+      words.forEach((word) => {
+        const nextLine = currentLine ? `${currentLine} ${word}` : word;
+
+        if (!currentLine || measureTextWidth(nextLine, font) <= maxWidth) {
+          currentLine = nextLine;
+          return;
+        }
+
+        lines.push(currentLine);
+        currentLine = word;
+      });
+
+      if (currentLine) {
+        lines.push(currentLine);
+      }
+    });
+
+    return lines.length > 0 ? lines : [""];
+  };
 
   printableSvg.querySelectorAll("foreignObject").forEach((foreignObject) => {
-    const textContent = foreignObject.textContent?.replace(/\s+/g, " ").trim() ?? "";
+    const isTerminal = foreignObject.closest(".svg-terminal-node");
+    const isComment = foreignObject.closest(".svg-node-comment");
+    const nodeGroup = foreignObject.closest(".svg-node");
+    const nodeId = Number(nodeGroup?.getAttribute("data-node-id") ?? "");
+    const sourceNode = Number.isFinite(nodeId) ? findNodeById(nodeId) : null;
+    const rawText = sourceNode
+      ? getNodeDisplayText(sourceNode)
+      : (foreignObject.textContent || "");
+    const textContent = String(rawText ?? "")
+      .replace(/\r\n/g, "\n")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n[ \t]+/g, "\n")
+      .trim();
 
     if (!textContent) {
       foreignObject.remove();
@@ -1611,18 +1735,38 @@ const simplifySvgLabelsForPdf = (printableSvg) => {
     const y = Number(foreignObject.getAttribute("y") ?? "0");
     const width = Number(foreignObject.getAttribute("width") ?? "0");
     const height = Number(foreignObject.getAttribute("height") ?? "0");
-    const isTerminal = foreignObject.closest(".svg-terminal-node");
-
+    const fontFamily = isTerminal ? "Georgia, serif" : "Arial, sans-serif";
+    const fontSize = isTerminal ? 22 : 16;
+    const fontWeight = isTerminal ? "600" : "700";
+    const lineHeight = isTerminal ? 26 : (isComment ? 19 : 20);
+    const font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+    const horizontalPadding = isComment ? 4 : 2;
+    const verticalPadding = isTerminal ? 2 : (isComment ? 6 : 8);
+    const wrappedLines = wrapTextLines(textContent, Math.max(width - horizontalPadding * 2, 12), font);
+    const blockHeight = wrappedLines.length * lineHeight;
     const textNode = document.createElementNS(svgNamespace, "text");
-    textNode.setAttribute("x", String(x + width / 2));
-    textNode.setAttribute("y", String(y + height / 2));
-    textNode.setAttribute("text-anchor", "middle");
-    textNode.setAttribute("dominant-baseline", "middle");
+    const textX = isComment ? x + horizontalPadding : x + width / 2;
+    const availableHeight = Math.max(height - verticalPadding * 2, fontSize);
+    const startY = isComment
+      ? y + verticalPadding
+      : y + verticalPadding + Math.max((availableHeight - blockHeight) / 2, 0);
+
+    textNode.setAttribute("x", String(textX));
+    textNode.setAttribute("y", String(startY));
+    textNode.setAttribute("text-anchor", isComment ? "start" : "middle");
+    textNode.setAttribute("dominant-baseline", "hanging");
     textNode.setAttribute("fill", "#2f2419");
-    textNode.setAttribute("font-family", isTerminal ? "Georgia, serif" : "Arial, sans-serif");
-    textNode.setAttribute("font-size", isTerminal ? "22" : "16");
-    textNode.setAttribute("font-weight", isTerminal ? "600" : "700");
-    textNode.textContent = textContent;
+    textNode.setAttribute("font-family", fontFamily);
+    textNode.setAttribute("font-size", String(fontSize));
+    textNode.setAttribute("font-weight", fontWeight);
+
+    wrappedLines.forEach((line, index) => {
+      const tspan = document.createElementNS(svgNamespace, "tspan");
+      tspan.setAttribute("x", String(textX));
+      tspan.setAttribute("dy", index === 0 ? "0" : String(lineHeight));
+      tspan.textContent = line || "\u00A0";
+      textNode.append(tspan);
+    });
 
     foreignObject.replaceWith(textNode);
   });
@@ -1675,6 +1819,75 @@ const inlineSvgComputedStylesForPdf = (sourceSvg, printableSvg) => {
           printableNode.style.setProperty(propertyName, propertyValue);
         }
       });
+    });
+  });
+};
+
+const inlineForeignObjectComputedStylesForPdf = (sourceSvg, printableSvg) => {
+  const sourceForeignObjects = Array.from(sourceSvg.querySelectorAll("foreignObject"));
+  const printableForeignObjects = Array.from(printableSvg.querySelectorAll("foreignObject"));
+  const copiedProperties = [
+    "display",
+    "width",
+    "height",
+    "padding",
+    "margin",
+    "box-sizing",
+    "align-items",
+    "justify-content",
+    "align-self",
+    "text-align",
+    "white-space",
+    "overflow",
+    "overflow-wrap",
+    "word-break",
+    "font-size",
+    "font-weight",
+    "line-height",
+    "letter-spacing",
+    "color",
+    "background",
+    "border",
+    "border-radius",
+  ];
+
+  sourceForeignObjects.forEach((sourceForeignObject, index) => {
+    const printableForeignObject = printableForeignObjects[index];
+
+    if (!(sourceForeignObject instanceof SVGForeignObjectElement) || !(printableForeignObject instanceof SVGForeignObjectElement)) {
+      return;
+    }
+
+    const sourceHtmlNodes = [
+      sourceForeignObject.firstElementChild,
+      ...sourceForeignObject.querySelectorAll("*"),
+    ].filter(Boolean);
+    const printableHtmlNodes = [
+      printableForeignObject.firstElementChild,
+      ...printableForeignObject.querySelectorAll("*"),
+    ].filter(Boolean);
+
+    sourceHtmlNodes.forEach((sourceNode, htmlIndex) => {
+      const printableNode = printableHtmlNodes[htmlIndex];
+
+      if (!(sourceNode instanceof HTMLElement) || !(printableNode instanceof HTMLElement)) {
+        return;
+      }
+
+      const computedStyle = window.getComputedStyle(sourceNode);
+      copiedProperties.forEach((propertyName) => {
+        const propertyValue = computedStyle.getPropertyValue(propertyName).trim();
+
+        if (propertyValue) {
+          printableNode.style.setProperty(propertyName, propertyValue);
+        }
+      });
+
+      if (sourceNode.classList.contains("svg-terminal-label")) {
+        printableNode.style.setProperty("font-family", "Georgia, serif");
+      } else {
+        printableNode.style.setProperty("font-family", "Arial, sans-serif");
+      }
     });
   });
 };
@@ -2065,6 +2278,8 @@ const runWithTemporaryTheme = async (temporaryTheme, task) => {
 
   if (previousTheme !== temporaryTheme) {
     applyTheme(temporaryTheme);
+    renderFlowchart();
+    await new Promise((resolve) => requestAnimationFrame(() => resolve()));
     await new Promise((resolve) => requestAnimationFrame(() => resolve()));
   }
 
@@ -2073,6 +2288,7 @@ const runWithTemporaryTheme = async (temporaryTheme, task) => {
   } finally {
     if (previousTheme !== temporaryTheme) {
       applyTheme(previousTheme);
+      renderFlowchart();
     }
   }
 };
@@ -3623,6 +3839,7 @@ const SVG_NODE_SIZE_PRESETS = {
 };
 
 let svgNodeMeasurementRoot = null;
+let hasScheduledFontAwareRender = false;
 
 const getSvgNodeVerticalInset = (type) => {
   switch (type) {
@@ -3715,6 +3932,22 @@ const measureSvgNodeLabelHeight = (type, width, markup) => {
   return Math.max(measuredHeight, 24);
 };
 
+const scheduleFontAwareRender = () => {
+  if (hasScheduledFontAwareRender || !("fonts" in document) || typeof document.fonts.ready?.then !== "function") {
+    return;
+  }
+
+  hasScheduledFontAwareRender = true;
+
+  document.fonts.ready
+    .then(() => {
+      renderFlowchart();
+    })
+    .catch(() => {
+      // Ignore font loading failures.
+    });
+};
+
 const estimateWrappedLineCount = (text, charsPerLine) => {
   if (!text) {
     return 1;
@@ -3805,13 +4038,14 @@ const getSvgNodeSize = (nodeOrType) => {
 
 const getAdaptiveConnectorHeight = (nodeOrType) => {
   const type = typeof nodeOrType === "string" ? nodeOrType : nodeOrType.type;
+
+  if (type === "comment") {
+    return SVG_CONNECTOR_HEIGHT;
+  }
+
   const preset = SVG_NODE_SIZE_PRESETS[type] ?? SVG_NODE_SIZE_PRESETS.default;
   const { height } = getSvgNodeSize(nodeOrType);
   const extraHeight = Math.max(0, height - preset.minHeight);
-
-  if (type === "comment") {
-    return SVG_CONNECTOR_HEIGHT + Math.ceil(extraHeight * 0.12);
-  }
 
   return SVG_CONNECTOR_HEIGHT + Math.ceil(extraHeight * 0.45);
 };
@@ -5683,4 +5917,5 @@ loadCodeLanguagePreference();
 syncCodeLanguageTabs();
 setActiveMainView(loadMainViewPreference());
 renderFlowchart();
+scheduleFontAwareRender();
 syncExecutionControls();
