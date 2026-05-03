@@ -1,6 +1,7 @@
 const mainTabs = document.querySelectorAll(".folder-tab");
 const mainViews = document.querySelectorAll(".main-view");
 const languageTabs = document.querySelectorAll(".language-tab");
+const appShell = document.querySelector(".app-shell");
 const workspace = document.querySelector(".workspace");
 const workspaceResizer = document.querySelector("#workspace-resizer");
 const sidebarContent = document.querySelector(".sidebar-content");
@@ -9,6 +10,9 @@ const variablesSection = document.querySelector(".variables-section");
 const newDiagramButton = document.querySelector("#new-diagram-button");
 const loadDiagramButton = document.querySelector("#load-diagram-button");
 const saveDiagramButton = document.querySelector("#save-diagram-button");
+const undoButton = document.querySelector("#undo-button");
+const redoButton = document.querySelector("#redo-button");
+const focusModeButton = document.querySelector("#focus-mode-button");
 const loadDiagramInput = document.querySelector("#load-diagram-input");
 const runProgramButton = document.querySelector("#run-program-button");
 const stepProgramButton = document.querySelector("#step-program-button");
@@ -30,6 +34,7 @@ const consoleInputButton = document.querySelector("#console-input-button");
 const insertDialogBackdrop = document.querySelector("#insert-dialog-backdrop");
 const insertDialogClose = document.querySelector("#insert-dialog-close");
 const insertNodeButtons = document.querySelectorAll("[data-node-type]");
+const insertPasteButton = document.querySelector(".quick-action-paste");
 const insertDialogNotice = document.querySelector("#insert-dialog-notice");
 const insertDialogNoticeClose = document.querySelector("#insert-dialog-notice-close");
 const insertDialogNoticeText = document.querySelector("#insert-dialog-notice-text");
@@ -59,6 +64,7 @@ const forEndInput = document.querySelector("#for-end-input");
 const forStepInput = document.querySelector("#for-step-input");
 const propertyForm = document.querySelector("#property-form");
 const STORAGE_KEY = "flowgorithm-web-diagram";
+const HISTORY_STORAGE_KEY = "algoflow-history";
 const NODE_LABEL_PREFERENCE_KEY = "flowgorithm-web-show-node-type";
 const MAIN_VIEW_PREFERENCE_KEY = "algoflow-main-view";
 const CODE_LANGUAGE_PREFERENCE_KEY = "algoflow-code-language";
@@ -186,7 +192,10 @@ let editingNodeId = null;
 let lastConnectorButton = null;
 let selectedNodeIds = new Set();
 let previewSelectedNodeIds = new Set();
+let flowClipboard = null;
 let selectionDrag = null;
+let undoHistory = [];
+let redoHistory = [];
 let isProgramRunning = false;
 let executionCursor = -1;
 let currentAssignSuggestions = [];
@@ -204,6 +213,8 @@ let isSidebarSplitManual = false;
 let pendingSidebarAutoSyncFrame = null;
 let selectedCodeLanguage = "c";
 let currentTheme = "light";
+let isDiagramFocusMode = false;
+let mainViewBeforeFocusMode = null;
 
 const RUNTIME_UNDECLARED = Symbol("runtime-undeclared");
 const MAX_RUNTIME_OPERATIONS = 10000;
@@ -376,6 +387,57 @@ const removeNodeById = (nodeId) => {
   return true;
 };
 
+const areNodePathsEqual = (leftPath, rightPath) => {
+  if (leftPath.length !== rightPath.length) {
+    return false;
+  }
+
+  return leftPath.every((segment, index) =>
+    segment.nodeId === rightPath[index]?.nodeId && segment.branchKey === rightPath[index]?.branchKey
+  );
+};
+
+const isAncestorNodeSelected = (nodeId) => {
+  const location = findNodeLocationById(nodeId);
+
+  if (!location) {
+    return false;
+  }
+
+  return location.path.some((segment) => selectedNodeIds.has(segment.nodeId));
+};
+
+const getClipboardSelectionContext = () => {
+  if (selectedNodeIds.size === 0) {
+    return { error: "Seleziona almeno un nodo." };
+  }
+
+  const selectedLocations = Array.from(selectedNodeIds)
+    .filter((nodeId) => !isAncestorNodeSelected(nodeId))
+    .map((nodeId) => findNodeLocationById(nodeId))
+    .filter(Boolean);
+
+  if (selectedLocations.length === 0) {
+    return { error: "La selezione corrente non contiene nodi copiabili." };
+  }
+
+  const [firstLocation] = selectedLocations;
+  const hasMixedContainers = selectedLocations.some((location) => !areNodePathsEqual(location.path, firstLocation.path));
+
+  if (hasMixedContainers) {
+    return { error: "Per copia, taglia e incolla seleziona nodi appartenenti allo stesso blocco o ramo." };
+  }
+
+  selectedLocations.sort((left, right) => left.index - right.index);
+
+  return {
+    path: firstLocation.path,
+    container: firstLocation.container,
+    locations: selectedLocations,
+    nodes: selectedLocations.map((location) => location.node),
+  };
+};
+
 const serializeNode = (node) => {
   const serializedNode = {
     id: node.id,
@@ -484,7 +546,167 @@ const normalizeNode = (rawNode) => {
   return normalizedNode;
 };
 
-const applyPersistedFlowNodes = (rawNodes) => {
+const cloneNodeForClipboard = (node) => {
+  const clonedNode = normalizeNode(serializeNode(node));
+
+  if (!clonedNode) {
+    throw new Error("Impossibile copiare il nodo selezionato.");
+  }
+
+  return clonedNode;
+};
+
+const assignFreshNodeIds = (nodes) => {
+  const assignIds = (nodeList) => {
+    nodeList.forEach((node) => {
+      node.id = nextNodeId;
+      nextNodeId += 1;
+
+      if (node.branches) {
+        Object.values(node.branches).forEach((branchNodes) => assignIds(branchNodes));
+      }
+    });
+  };
+
+  assignIds(nodes);
+  return nodes;
+};
+
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const replaceIdentifierInExpression = (text, fromName, toName) => {
+  if (!text || fromName === toName) {
+    return text;
+  }
+
+  const pattern = new RegExp(`\\b${escapeRegExp(fromName)}\\b`, "g");
+  return text.replace(pattern, toName);
+};
+
+const renameIdentifierInOutputTemplate = (text, fromName, toName) => {
+  if (!text || fromName === toName) {
+    return text;
+  }
+
+  const placeholderPattern = new RegExp(`\\{${escapeRegExp(fromName)}\\}`, "g");
+  return text.replace(placeholderPattern, `{${toName}}`);
+};
+
+const renameIdentifierAcrossNodes = (nodes, fromName, toName) => {
+  traverseNodes(nodes, (node) => {
+    if (node.type === "declare" && node.declareConfig?.names) {
+      node.declareConfig.names = node.declareConfig.names.map((name) => (name === fromName ? toName : name));
+      return;
+    }
+
+    if (node.type === "assign") {
+      const parsedAssignment = parseAssignmentStatement(node.value);
+
+      if (parsedAssignment) {
+        const variableName = parsedAssignment.variableName === fromName ? toName : parsedAssignment.variableName;
+        const expression = replaceIdentifierInExpression(parsedAssignment.expression, fromName, toName);
+        node.value = `${variableName} ${parsedAssignment.operator} ${expression}`.trim();
+      }
+      return;
+    }
+
+    if (node.type === "input") {
+      node.value = node.value.trim() === fromName ? toName : node.value;
+      return;
+    }
+
+    if (node.type === "output") {
+      node.value = renameIdentifierInOutputTemplate(node.value, fromName, toName);
+      return;
+    }
+
+    if (node.type === "if" || node.type === "while" || node.type === "do") {
+      node.value = replaceIdentifierInExpression(node.value, fromName, toName);
+      return;
+    }
+
+    if (node.type === "for") {
+      if (node.forConfig) {
+        node.forConfig.variable = node.forConfig.variable === fromName ? toName : node.forConfig.variable;
+        node.forConfig.start = replaceIdentifierInExpression(node.forConfig.start, fromName, toName);
+        node.forConfig.end = replaceIdentifierInExpression(node.forConfig.end, fromName, toName);
+        node.forConfig.step = replaceIdentifierInExpression(node.forConfig.step, fromName, toName);
+        const { variable, start, end, step } = node.forConfig;
+        node.value = `${variable} = ${start} to < ${end} step ${step}`.replace(/\s+/g, " ").trim();
+      } else {
+        node.value = replaceIdentifierInExpression(node.value, fromName, toName);
+      }
+    }
+  });
+};
+
+const getUniqueDeclaredName = (baseName, unavailableNames) => {
+  let suffix = 2;
+  let candidate = `${baseName}${suffix}`;
+
+  while (unavailableNames.has(candidate) || reservedLanguageNames.has(candidate) || reservedLanguageNames.has(candidate.toLowerCase())) {
+    suffix += 1;
+    candidate = `${baseName}${suffix}`;
+  }
+
+  return candidate;
+};
+
+const resolveClipboardDeclarationConflicts = (nodes) => {
+  const unavailableNames = getDeclaredVariableNameSet();
+  const renamedDeclarations = [];
+
+  traverseNodes(nodes, (node) => {
+    if (node.type !== "declare" || !node.declareConfig?.names) {
+      return;
+    }
+
+    node.declareConfig.names = node.declareConfig.names.map((name) => {
+      if (!unavailableNames.has(name)) {
+        unavailableNames.add(name);
+        return name;
+      }
+
+      const nextName = getUniqueDeclaredName(name, unavailableNames);
+      unavailableNames.add(nextName);
+      renamedDeclarations.push({ from: name, to: nextName });
+      return nextName;
+    });
+  });
+
+  renamedDeclarations.forEach(({ from, to }) => {
+    renameIdentifierAcrossNodes(nodes, from, to);
+  });
+
+  return renamedDeclarations;
+};
+
+const getPasteTargetContext = () => {
+  if (selectedNodeIds.size > 0) {
+    const selectionContext = getClipboardSelectionContext();
+
+    if (selectionContext.error) {
+      return { error: selectionContext.error };
+    }
+
+    const lastLocation = selectionContext.locations[selectionContext.locations.length - 1];
+    return {
+      path: selectionContext.path,
+      container: selectionContext.container,
+      index: lastLocation.index + 1,
+    };
+  }
+
+  return {
+    path: [],
+    container: flowNodes,
+    index: flowNodes.length,
+  };
+};
+
+const applyPersistedFlowNodes = (rawNodes, options = {}) => {
+  const { resetHistory = true } = options;
+
   if (!Array.isArray(rawNodes)) {
     throw new Error("Il file non contiene un elenco di nodi valido.");
   }
@@ -505,6 +727,10 @@ const applyPersistedFlowNodes = (rawNodes) => {
   lastConnectorButton = null;
   selectedNodeIds = new Set();
   previewSelectedNodeIds = new Set();
+  if (resetHistory) {
+    undoHistory = [];
+    redoHistory = [];
+  }
   clearRuntimeSnapshot();
 };
 
@@ -1351,6 +1577,80 @@ const downloadBlobAsFile = (blob, fileName) => {
   }, 0);
 };
 
+const getPersistedFlowNodesSnapshot = () => JSON.stringify(getPersistedFlowNodes());
+
+const saveHistoryState = () => {
+  try {
+    window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify({
+      undoHistory,
+      redoHistory,
+    }));
+  } catch {
+    // Ignore storage failures.
+  }
+};
+
+const loadHistoryState = () => {
+  try {
+    const rawHistory = window.localStorage.getItem(HISTORY_STORAGE_KEY);
+
+    if (!rawHistory) {
+      undoHistory = [];
+      redoHistory = [];
+      return;
+    }
+
+    const parsedHistory = JSON.parse(rawHistory);
+    undoHistory = Array.isArray(parsedHistory?.undoHistory)
+      ? parsedHistory.undoHistory.filter((entry) => typeof entry === "string")
+      : [];
+    redoHistory = Array.isArray(parsedHistory?.redoHistory)
+      ? parsedHistory.redoHistory.filter((entry) => typeof entry === "string")
+      : [];
+  } catch {
+    undoHistory = [];
+    redoHistory = [];
+    window.localStorage.removeItem(HISTORY_STORAGE_KEY);
+  }
+};
+
+const syncUndoButton = () => {
+  if (!undoButton) {
+    return;
+  }
+
+  const canUndo = undoHistory.length > 0 && !isProgramRunning;
+  undoButton.disabled = !canUndo;
+  undoButton.setAttribute("aria-disabled", String(!canUndo));
+  undoButton.title = canUndo ? "Annulla l'ultima modifica (Ctrl+Z)" : "Nessuna modifica da annullare";
+
+  if (redoButton) {
+    const canRedo = redoHistory.length > 0 && !isProgramRunning;
+    redoButton.disabled = !canRedo;
+    redoButton.setAttribute("aria-disabled", String(!canRedo));
+    redoButton.title = canRedo ? "Ripristina l'ultima modifica annullata (Ctrl+Y)" : "Nessuna modifica da ripristinare";
+  }
+};
+
+const pushUndoSnapshot = () => {
+  const snapshot = getPersistedFlowNodesSnapshot();
+
+  if (undoHistory[undoHistory.length - 1] === snapshot) {
+    syncUndoButton();
+    return;
+  }
+
+  undoHistory.push(snapshot);
+  redoHistory = [];
+
+  if (undoHistory.length > 100) {
+    undoHistory = undoHistory.slice(-100);
+  }
+
+  saveHistoryState();
+  syncUndoButton();
+};
+
 const getAlgoFlowSaveError = (error) => {
   if (error instanceof DOMException && error.name === "AbortError") {
     return error;
@@ -1497,7 +1797,8 @@ const importFlowchartFromJsonText = (rawText) => {
   removeDraftNode();
   closePropertyDialog({ restoreFocus: false });
   closeInsertDialog();
-  applyPersistedFlowNodes(persistedNodes);
+  pushUndoSnapshot();
+  applyPersistedFlowNodes(persistedNodes, { resetHistory: false });
 
   if (
     documentData &&
@@ -2137,6 +2438,65 @@ const buildAlgoFlowPdfBytes = async () => {
 
 const saveFlowchartState = () => {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(getPersistedFlowNodes()));
+  saveHistoryState();
+};
+
+const undoLastChange = () => {
+  if (isProgramRunning || undoHistory.length === 0) {
+    return;
+  }
+
+  const currentSnapshot = getPersistedFlowNodesSnapshot();
+  const snapshot = undoHistory.pop();
+
+  if (!snapshot) {
+    syncUndoButton();
+    return;
+  }
+
+  try {
+    const parsedNodes = JSON.parse(snapshot);
+    redoHistory.push(currentSnapshot);
+    closePropertyDialog({ restoreFocus: false });
+    closeInsertDialog();
+    applyPersistedFlowNodes(parsedNodes, { resetHistory: false });
+    saveFlowchartState();
+    renderFlowchart();
+  } catch {
+    window.alert("Impossibile annullare l'ultima modifica.");
+  } finally {
+    saveHistoryState();
+    syncUndoButton();
+  }
+};
+
+const redoLastChange = () => {
+  if (isProgramRunning || redoHistory.length === 0) {
+    return;
+  }
+
+  const currentSnapshot = getPersistedFlowNodesSnapshot();
+  const snapshot = redoHistory.pop();
+
+  if (!snapshot) {
+    syncUndoButton();
+    return;
+  }
+
+  try {
+    const parsedNodes = JSON.parse(snapshot);
+    undoHistory.push(currentSnapshot);
+    closePropertyDialog({ restoreFocus: false });
+    closeInsertDialog();
+    applyPersistedFlowNodes(parsedNodes, { resetHistory: false });
+    saveFlowchartState();
+    renderFlowchart();
+  } catch {
+    window.alert("Impossibile ripristinare la modifica annullata.");
+  } finally {
+    saveHistoryState();
+    syncUndoButton();
+  }
 };
 
 const loadFlowchartState = () => {
@@ -2174,6 +2534,11 @@ const loadNodeLabelPreference = () => {
 
 const saveNodeLabelPreference = () => {
   window.localStorage.setItem(NODE_LABEL_PREFERENCE_KEY, String(showNodeTypeInLabel));
+};
+
+const getActiveMainViewId = () => {
+  const activeView = Array.from(mainViews).find((view) => view.classList.contains("is-active"));
+  return activeView?.id ?? "diagram-view";
 };
 
 const setActiveMainView = (targetId) => {
@@ -2219,6 +2584,39 @@ const saveMainViewPreference = (targetId) => {
   } catch {
     // Ignore storage failures.
   }
+};
+
+const syncFocusModeButton = () => {
+  if (!focusModeButton) {
+    return;
+  }
+
+  focusModeButton.classList.toggle("is-active", isDiagramFocusMode);
+  focusModeButton.textContent = isDiagramFocusMode ? "Esci" : "Focus";
+  focusModeButton.title = isDiagramFocusMode ? "Esci dalla modalita focus (Esc)" : "Modalita focus diagramma (F)";
+  focusModeButton.setAttribute("aria-pressed", String(isDiagramFocusMode));
+};
+
+const setDiagramFocusMode = (nextValue) => {
+  const shouldEnable = Boolean(nextValue);
+
+  if (isDiagramFocusMode === shouldEnable) {
+    return;
+  }
+
+  if (shouldEnable) {
+    const activeMainViewId = getActiveMainViewId();
+    mainViewBeforeFocusMode = activeMainViewId === "diagram-view" ? null : activeMainViewId;
+    setActiveMainView("diagram-view");
+  } else if (mainViewBeforeFocusMode) {
+    setActiveMainView(mainViewBeforeFocusMode);
+    mainViewBeforeFocusMode = null;
+  }
+
+  isDiagramFocusMode = shouldEnable;
+  appShell?.classList.toggle("is-focus-mode", isDiagramFocusMode);
+  syncFocusModeButton();
+  renderFlowchart();
 };
 
 const loadCodeLanguagePreference = () => {
@@ -4140,79 +4538,111 @@ const renderSvgTextLabel = (text, x, y, anchor = "middle") => `
   <text class="svg-branch-label" x="${x}" y="${y}" text-anchor="${anchor}">${escapeHtml(text)}</text>
 `;
 
-const measureSequenceHalfSpan = (nodes, depth = 0) => {
+const measureSequenceHorizontalExtents = (nodes, depth = 0) => {
   if (!nodes.length) {
-    return 0;
+    return { left: 0, right: 0 };
   }
 
-  return nodes.reduce((maxSpan, childNode) => Math.max(maxSpan, measureNodeHalfSpan(childNode, depth)), 0);
+  return nodes.reduce((maxExtents, childNode) => {
+    const childExtents = measureNodeHorizontalExtents(childNode, depth);
+    return {
+      left: Math.max(maxExtents.left, childExtents.left),
+      right: Math.max(maxExtents.right, childExtents.right),
+    };
+  }, { left: 0, right: 0 });
 };
 
-const getBranchOffsetX = (node, depth = 0) => {
+const getIfBranchOffsets = (node, depth = 0) => {
   const baseOffset = depth === 0 ? SVG_BRANCH_OFFSET_X : SVG_NESTED_BRANCH_OFFSET_X;
 
   if (node.type !== "if") {
-    return baseOffset;
+    return {
+      leftOffset: baseOffset,
+      rightOffset: baseOffset,
+    };
   }
 
-  const falseSpan = measureSequenceHalfSpan(node.branches?.falseBranch ?? [], depth + 1);
-  const trueSpan = measureSequenceHalfSpan(node.branches?.trueBranch ?? [], depth + 1);
+  const falseExtents = measureSequenceHorizontalExtents(node.branches?.falseBranch ?? [], depth + 1);
+  const trueExtents = measureSequenceHorizontalExtents(node.branches?.trueBranch ?? [], depth + 1);
   const { width } = getSvgNodeSize(node);
+  const minOffset = Math.max(baseOffset, Math.ceil(width / 2) + 56);
 
-  return Math.max(
-    baseOffset,
-    Math.ceil(width / 2) + 56,
-    falseSpan + 64,
-    trueSpan + 64
-  );
+  return {
+    leftOffset: Math.max(minOffset, falseExtents.right + 64),
+    rightOffset: Math.max(minOffset, trueExtents.left + 64),
+  };
 };
 
 const getLoopBranchOffsetX = (node, depth = 0) => {
   const baseOffset = depth === 0 ? SVG_LOOP_BRANCH_OFFSET_X : SVG_LOOP_NESTED_BRANCH_OFFSET_X;
-  const bodySpan = measureSequenceHalfSpan(node.branches?.body ?? [], depth + 1);
+  const bodyExtents = measureSequenceHorizontalExtents(node.branches?.body ?? [], depth + 1);
   const { width } = getSvgNodeSize(node);
 
   return Math.max(
     baseOffset,
     Math.ceil(width / 2) + 52,
-    bodySpan + 64
+    bodyExtents.left + 64
   );
 };
 
-const measureNodeHalfSpan = (node, depth = 0) => {
+const measureNodeHorizontalExtents = (node, depth = 0) => {
   const { width } = getSvgNodeSize(node);
 
   if (node.type === "if") {
-    const branchOffset = getBranchOffsetX(node, depth);
-    const falseSpan = measureSequenceHalfSpan(node.branches?.falseBranch ?? [], depth + 1);
-    const trueSpan = measureSequenceHalfSpan(node.branches?.trueBranch ?? [], depth + 1);
+    const { leftOffset, rightOffset } = getIfBranchOffsets(node, depth);
+    const falseExtents = measureSequenceHorizontalExtents(node.branches?.falseBranch ?? [], depth + 1);
+    const trueExtents = measureSequenceHorizontalExtents(node.branches?.trueBranch ?? [], depth + 1);
 
-    return Math.max(
-      width / 2,
-      branchOffset + falseSpan,
-      branchOffset + trueSpan
-    );
+    return {
+      left: Math.max(
+        width / 2,
+        leftOffset + falseExtents.left,
+        Math.max(trueExtents.left - rightOffset, 0)
+      ),
+      right: Math.max(
+        width / 2,
+        rightOffset + trueExtents.right,
+        Math.max(falseExtents.right - leftOffset, 0)
+      ),
+    };
   }
 
   if (node.type === "while") {
     const branchOffset = getLoopBranchOffsetX(node, depth);
-    const bodySpan = measureSequenceHalfSpan(node.branches?.body ?? [], depth + 1);
+    const bodyExtents = measureSequenceHorizontalExtents(node.branches?.body ?? [], depth + 1);
 
-    return Math.max(width / 2, branchOffset + bodySpan);
+    return {
+      left: Math.max(width / 2, Math.max(bodyExtents.left - branchOffset, 0)),
+      right: Math.max(width / 2, branchOffset + bodyExtents.right),
+    };
   }
 
   if (node.type === "for") {
     const branchOffset = getLoopBranchOffsetX(node, depth);
-    const bodySpan = measureSequenceHalfSpan(node.branches?.body ?? [], depth + 1);
+    const bodyExtents = measureSequenceHorizontalExtents(node.branches?.body ?? [], depth + 1);
 
-    return Math.max(width / 2, branchOffset + bodySpan);
+    return {
+      left: Math.max(width / 2, Math.max(bodyExtents.left - branchOffset, 0)),
+      right: Math.max(width / 2, branchOffset + bodyExtents.right),
+    };
   }
 
   if (node.type === "do") {
-    return Math.max(width / 2, SVG_DO_LOOP_OFFSET_X + 32);
+    return {
+      left: width / 2,
+      right: Math.max(width / 2, SVG_DO_LOOP_OFFSET_X + 32),
+    };
   }
 
-  return width / 2;
+  return {
+    left: width / 2,
+    right: width / 2,
+  };
+};
+
+const measureNodeHalfSpan = (node, depth = 0) => {
+  const extents = measureNodeHorizontalExtents(node, depth);
+  return Math.max(extents.left, extents.right);
 };
 
 const renderSvgNodeBlockAt = (node, y, path, centerX) => {
@@ -4409,9 +4839,9 @@ const renderSvgDoNodeBlock = (node, y, path, centerX) => {
 const renderSvgIfNodeBlock = (node, y, path, centerX) => {
   const { width, height } = getSvgNodeSize(node);
   const nodeX = centerX - width / 2;
-  const branchOffsetX = getBranchOffsetX(node, path.length);
-  const falseBranchX = centerX - branchOffsetX;
-  const trueBranchX = centerX + branchOffsetX;
+  const { leftOffset, rightOffset } = getIfBranchOffsets(node, path.length);
+  const falseBranchX = centerX - leftOffset;
+  const trueBranchX = centerX + rightOffset;
   const sideY = y + height / 2;
   const leftEdgeX = nodeX;
   const rightEdgeX = nodeX + width;
@@ -5000,6 +5430,7 @@ const renderFlowchart = () => {
 
   renderCodePreview();
   refreshExecutionUi();
+  syncUndoButton();
 };
 
 const openInsertDialog = (insertIndex, sourceButton) => {
@@ -5009,6 +5440,7 @@ const openInsertDialog = (insertIndex, sourceButton) => {
 
   pendingInsertTarget = insertIndex;
   lastConnectorButton = sourceButton;
+  syncInsertPasteButton();
   hideInsertDialogNotice();
   insertDialogBackdrop.hidden = false;
   document.body.style.overflow = "hidden";
@@ -5028,6 +5460,19 @@ const closeInsertDialog = () => {
   if (lastConnectorButton && typeof lastConnectorButton.focus === "function") {
     lastConnectorButton.focus();
   }
+};
+
+const syncInsertPasteButton = () => {
+  if (!insertPasteButton) {
+    return;
+  }
+
+  const hasClipboardNodes = Boolean(flowClipboard?.nodes?.length);
+  insertPasteButton.disabled = !hasClipboardNodes;
+  insertPasteButton.setAttribute("aria-disabled", String(!hasClipboardNodes));
+  insertPasteButton.title = hasClipboardNodes
+    ? "Incolla i nodi copiati in questo punto"
+    : "Copia o taglia prima uno o più nodi";
 };
 
 const openPropertyDialog = (nodeId) => {
@@ -5145,6 +5590,9 @@ const removeDraftNode = () => {
 
 const resetFlowchart = () => {
   cancelExecution();
+  if (flowNodes.length > 0) {
+    pushUndoSnapshot();
+  }
   clearRuntimeSnapshot();
   flowNodes.length = 0;
   nextNodeId = 1;
@@ -5157,11 +5605,101 @@ const resetFlowchart = () => {
   renderFlowchart();
 };
 
+const copySelectedNodes = () => {
+  if (isProgramRunning) {
+    return;
+  }
+
+  const selectionContext = getClipboardSelectionContext();
+
+  if (selectionContext.error) {
+    window.alert(selectionContext.error);
+    return;
+  }
+
+  flowClipboard = {
+    nodes: selectionContext.nodes.map(cloneNodeForClipboard),
+  };
+  syncInsertPasteButton();
+};
+
+const cutSelectedNodes = () => {
+  if (isProgramRunning) {
+    return;
+  }
+
+  const selectionContext = getClipboardSelectionContext();
+
+  if (selectionContext.error) {
+    window.alert(selectionContext.error);
+    return;
+  }
+
+  flowClipboard = {
+    nodes: selectionContext.nodes.map(cloneNodeForClipboard),
+  };
+  syncInsertPasteButton();
+  pushUndoSnapshot();
+
+  [...selectionContext.locations]
+    .sort((left, right) => right.index - left.index)
+    .forEach((location) => {
+      location.container.splice(location.index, 1);
+    });
+
+  clearRuntimeSnapshot();
+  selectedNodeIds = new Set();
+  saveFlowchartState();
+  renderFlowchart();
+};
+
+const pasteClipboardNodes = () => {
+  if (isProgramRunning || !flowClipboard?.nodes?.length) {
+    return;
+  }
+
+  const pasteTarget = pendingInsertTarget
+    ? {
+        path: pendingInsertTarget.path,
+        container: getContainerByPath(pendingInsertTarget.path),
+        index: pendingInsertTarget.index,
+      }
+    : getPasteTargetContext();
+
+  if (pasteTarget.error) {
+    window.alert(pasteTarget.error);
+    return;
+  }
+
+  const pastedNodes = flowClipboard.nodes.map(cloneNodeForClipboard);
+  const renamedDeclarations = resolveClipboardDeclarationConflicts(pastedNodes);
+  assignFreshNodeIds(pastedNodes);
+  pushUndoSnapshot();
+
+  pasteTarget.container.splice(pasteTarget.index, 0, ...pastedNodes);
+  clearRuntimeSnapshot();
+  selectedNodeIds = new Set(pastedNodes.map((node) => node.id));
+  saveFlowchartState();
+  renderFlowchart();
+
+  if (renamedDeclarations.length > 0) {
+    const renameSummary = renamedDeclarations
+      .map(({ from, to }) => `${from} -> ${to}`)
+      .join(", ");
+    window.alert(`Alcune variabili dichiarate erano già presenti nel diagramma e sono state rinominate automaticamente: ${renameSummary}.`);
+  }
+
+  if (!insertDialogBackdrop.hidden) {
+    closeInsertDialog();
+  }
+};
+
 const deleteSelectedNode = () => {
   if (isProgramRunning || selectedNodeIds.size === 0) {
     return;
   }
 
+  pushUndoSnapshot();
   const removableIds = new Set(selectedNodeIds);
   Array.from(removableIds).forEach((nodeId) => {
     removeNodeById(nodeId);
@@ -5235,6 +5773,7 @@ const finalizeNode = () => {
     node.value = propertyInput.value.trim();
   }
 
+  pushUndoSnapshot();
   node.isDraft = false;
   clearRuntimeSnapshot();
   saveFlowchartState();
@@ -5309,6 +5848,12 @@ insertNodeButtons.forEach((button) => {
 
 if (insertDialogClose) {
   insertDialogClose.addEventListener("click", closeInsertDialog);
+}
+
+if (insertPasteButton) {
+  insertPasteButton.addEventListener("click", () => {
+    pasteClipboardNodes();
+  });
 }
 
 if (insertDialogNoticeClose) {
@@ -5824,6 +6369,24 @@ if (saveDiagramButton) {
   });
 }
 
+if (undoButton) {
+  undoButton.addEventListener("click", () => {
+    undoLastChange();
+  });
+}
+
+if (redoButton) {
+  redoButton.addEventListener("click", () => {
+    redoLastChange();
+  });
+}
+
+if (focusModeButton) {
+  focusModeButton.addEventListener("click", () => {
+    setDiagramFocusMode(!isDiagramFocusMode);
+  });
+}
+
 if (runProgramButton) {
   runProgramButton.addEventListener("click", () => {
     startProgramExecution("run");
@@ -5881,6 +6444,12 @@ document.addEventListener("keydown", (event) => {
 
     if (!insertDialogBackdrop.hidden) {
       closeInsertDialog();
+      return;
+    }
+
+    if (isDiagramFocusMode) {
+      event.preventDefault();
+      setDiagramFocusMode(false);
     }
 
     return;
@@ -5891,6 +6460,30 @@ document.addEventListener("keydown", (event) => {
   }
 
   const normalizedKey = typeof event.key === "string" ? event.key.toLowerCase() : "";
+
+  if (event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey && normalizedKey === "z") {
+    event.preventDefault();
+    undoLastChange();
+    return;
+  }
+
+  if (event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey && normalizedKey === "y") {
+    event.preventDefault();
+    redoLastChange();
+    return;
+  }
+
+  if (event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey && normalizedKey === "c") {
+    event.preventDefault();
+    copySelectedNodes();
+    return;
+  }
+
+  if (event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey && normalizedKey === "x") {
+    event.preventDefault();
+    cutSelectedNodes();
+    return;
+  }
 
   if (!event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey && normalizedKey === "e") {
     event.preventDefault();
@@ -5904,6 +6497,20 @@ document.addEventListener("keydown", (event) => {
     return;
   }
 
+  if (
+    !event.ctrlKey &&
+    !event.shiftKey &&
+    !event.altKey &&
+    !event.metaKey &&
+    normalizedKey === "f" &&
+    propertyDialogBackdrop.hidden &&
+    insertDialogBackdrop.hidden
+  ) {
+    event.preventDefault();
+    setDiagramFocusMode(!isDiagramFocusMode);
+    return;
+  }
+
   if ((event.key === "Delete" || event.key === "Backspace") && propertyDialogBackdrop.hidden && insertDialogBackdrop.hidden) {
     event.preventDefault();
     deleteSelectedNode();
@@ -5913,8 +6520,10 @@ document.addEventListener("keydown", (event) => {
 loadThemePreference();
 loadNodeLabelPreference();
 loadFlowchartState();
+loadHistoryState();
 loadCodeLanguagePreference();
 syncCodeLanguageTabs();
+syncFocusModeButton();
 setActiveMainView(loadMainViewPreference());
 renderFlowchart();
 scheduleFontAwareRender();

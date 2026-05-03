@@ -40,10 +40,21 @@
               <span class="folder-tab-label">Codice</span>
             </button>
           </div>
-          <label class="topbar-toggle folder-toggle" for="show-node-type-toggle">
-            <input type="checkbox" id="show-node-type-toggle">
-            <span>Mostra nome nodo</span>
-          </label>
+          <div class="folder-tabs-actions">
+            <div class="history-actions" aria-label="Cronologia modifiche">
+              <button type="button" class="history-button" id="undo-button" title="Annulla (Ctrl+Z)" aria-label="Annulla" disabled>
+                <span class="history-button-icon" aria-hidden="true">↶</span>
+              </button>
+              <button type="button" class="history-button" id="redo-button" title="Ripristina (Ctrl+Y)" aria-label="Ripristina" disabled>
+                <span class="history-button-icon" aria-hidden="true">↷</span>
+              </button>
+            </div>
+            <button type="button" class="ghost-button focus-toggle-button" id="focus-mode-button" title="F">Focus</button>
+            <label class="topbar-toggle folder-toggle" for="show-node-type-toggle">
+              <input type="checkbox" id="show-node-type-toggle">
+              <span>Mostra nome nodo</span>
+            </label>
+          </div>
         </div>
 
         <div class="main-content">
