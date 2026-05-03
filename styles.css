@@ -50,17 +50,11 @@ body {
 body {
   font-family: "Manrope", sans-serif;
   color: var(--text);
-  background:
-    radial-gradient(circle at top left, rgba(196, 92, 45, 0.18), transparent 32%),
-    radial-gradient(circle at bottom right, rgba(31, 92, 91, 0.16), transparent 26%),
-    linear-gradient(135deg, var(--bg), #fbf7f0 45%, var(--bg-accent));
+  background: var(--bg);
 }
 
 :root[data-theme="dark"] body {
-  background:
-    radial-gradient(circle at top left, rgba(211, 116, 69, 0.18), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(122, 201, 200, 0.14), transparent 24%),
-    linear-gradient(135deg, var(--bg), #161d26 46%, var(--bg-accent));
+  background: var(--bg);
 }
 
 body.is-drag-selecting {
@@ -523,11 +517,7 @@ button:disabled {
 .canvas-grid {
   position: absolute;
   inset: 0;
-  background-image:
-    linear-gradient(rgba(74, 58, 43, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(74, 58, 43, 0.06) 1px, transparent 1px);
-  background-size: 32px 32px;
-  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.95), rgba(0, 0, 0, 0.55));
+  background: transparent;
 }
 
 .selection-box {
@@ -1748,9 +1738,10 @@ button:disabled {
 .code-canvas {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
   flex: 1;
   min-height: 0;
+  padding-top: 6px;
 }
 
 .code-card,
@@ -1761,12 +1752,18 @@ button:disabled {
 }
 
 .code-card {
-  padding: 16px 18px;
+  padding: 14px 18px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
+  margin: 0;
+}
+
+.code-card h3 {
+  font-size: 1rem;
+  line-height: 1.2;
 }
 
 .code-preview {
@@ -2087,9 +2084,7 @@ button:disabled {
 }
 
 :root[data-theme="dark"] .canvas-grid {
-  background-image:
-    linear-gradient(rgba(231, 237, 247, 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(231, 237, 247, 0.07) 1px, transparent 1px);
+  background: transparent;
 }
 
 :root[data-theme="dark"] .folder-tabs {
@@ -2482,6 +2477,9 @@ button:disabled {
 @media (max-width: 1000px) {
   .app-shell {
     padding: 6px;
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
   }
 
   .topbar {
@@ -2490,6 +2488,13 @@ button:disabled {
     align-items: center;
     gap: 8px;
     margin-bottom: 8px;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    padding: 6px 0 8px;
+    background:
+      linear-gradient(180deg, rgba(243, 239, 231, 0.98), rgba(243, 239, 231, 0.92));
+    backdrop-filter: blur(14px);
   }
 
   .topbar-brand {
@@ -2553,11 +2558,8 @@ button:disabled {
   }
 
   .workspace {
-    display: grid;
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 1fr) auto;
-    gap: 8px;
-    height: calc(100vh - 74px);
+    display: block;
+    height: auto;
   }
 
   .workspace-resizer {
@@ -2565,14 +2567,17 @@ button:disabled {
   }
 
   .diagram-panel {
-    min-height: 0;
+    min-height: calc(100svh - 82px);
+    margin-bottom: 8px;
   }
 
   .code-card {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 12px 14px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    margin-top: 0;
   }
 
   .folder-tabs {
@@ -2663,7 +2668,7 @@ button:disabled {
 
   .sidebar-panel {
     padding: 8px;
-    min-height: 0;
+    min-height: auto;
   }
 
   .mobile-sidebar-tabs {
@@ -2773,12 +2778,12 @@ button:disabled {
   }
 
   .diagram-canvas {
-    min-height: 460px;
+    min-height: calc(100svh - 176px);
     border-radius: 16px;
   }
 
   .code-canvas {
-    min-height: 460px;
+    min-height: calc(100svh - 176px);
   }
 
   .code-preview {
@@ -2804,25 +2809,136 @@ button:disabled {
   }
 
   .insert-dialog-backdrop {
-    padding: 68px 14px 14px;
+    padding: 56px 10px 10px;
   }
 
   .insert-dialog {
-    padding: 16px;
+    width: min(720px, 100%);
+    padding: 14px;
+    border-radius: 22px;
+  }
+
+  .insert-dialog-header {
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  .insert-dialog-header h3 {
+    font-size: 1.02rem;
+  }
+
+  .insert-dialog-notice {
+    top: 72px;
+    width: min(360px, calc(100% - 28px));
+    padding: 12px 14px;
+    border-radius: 14px;
   }
 
   .property-dialog-backdrop {
-    padding: 14px;
+    padding: 12px;
+  }
+
+  .property-dialog {
+    width: min(640px, 100%);
+    max-height: min(760px, calc(100vh - 24px));
+    border-radius: 18px;
+  }
+
+  .property-dialog-header {
+    gap: 12px;
+    padding: 14px 16px;
+  }
+
+  .property-dialog-header h3 {
+    font-size: 1.04rem;
   }
 
   .property-dialog-hero,
   .property-form {
-    padding-left: 18px;
-    padding-right: 18px;
+    padding-left: 16px;
+    padding-right: 16px;
   }
 
   .declare-type-grid {
     grid-template-columns: 1fr;
+  }
+
+  .property-dialog-hero {
+    gap: 14px;
+    padding-top: 16px;
+    padding-bottom: 16px;
+  }
+
+  .property-preview {
+    min-height: 78px;
+  }
+
+  .property-preview .flowchart-node {
+    min-width: 124px;
+    min-height: 44px;
+  }
+
+  .property-description {
+    font-size: 0.92rem;
+    line-height: 1.38;
+  }
+
+  .property-form {
+    gap: 18px;
+    padding-top: 18px;
+    padding-bottom: 18px;
+  }
+
+  .property-error {
+    top: -10px;
+    width: min(360px, calc(100% - 32px));
+    padding: 12px 14px;
+    border-radius: 14px;
+    font-size: 0.88rem;
+  }
+
+  .property-field {
+    gap: 8px;
+  }
+
+  .property-field span,
+  .declare-type-group legend,
+  .radio-option,
+  .checkbox-option {
+    font-size: 0.9rem;
+  }
+
+  .property-field input,
+  .property-field textarea {
+    padding: 0.8rem 0.88rem;
+    border-radius: 12px;
+  }
+
+  .declare-fields {
+    gap: 18px;
+  }
+
+  .for-fields-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 14px;
+  }
+
+  .declare-type-grid {
+    gap: 18px;
+  }
+
+  .declare-type-group {
+    gap: 10px;
+  }
+
+  .property-dialog-actions {
+    gap: 10px;
+  }
+
+  .property-button {
+    min-width: 118px;
+    padding: 0.78rem 0.9rem;
+    border-radius: 12px;
   }
 
   .checkbox-option {
@@ -2830,11 +2946,15 @@ button:disabled {
   }
 
   .insert-dialog-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 12px;
   }
 
   .insert-dialog-actions {
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
   }
 
   .property-dialog-actions {
@@ -2845,6 +2965,12 @@ button:disabled {
     min-height: 360px;
   }
 
+}
+
+@media (max-width: 1000px) {
+  :root[data-theme="dark"] .topbar {
+    background: rgba(18, 22, 28, 0.96);
+  }
 }
 
 @media (max-width: 630px) {
@@ -2974,12 +3100,12 @@ button:disabled {
   }
 
   .diagram-canvas {
-    min-height: 380px;
+    min-height: calc(100svh - 164px);
     border-radius: 14px;
   }
 
   .canvas-grid {
-    background-size: 24px 24px;
+    background: transparent;
   }
 
   .svg-terminal-label {
@@ -3080,16 +3206,16 @@ button:disabled {
   }
 
   .code-card h3 {
-    font-size: 0.95rem;
+    display: none;
   }
 
   .language-tabs {
-    gap: 6px;
+    gap: 4px;
   }
 
   .language-tab {
-    padding: 0.42rem 0.7rem;
-    font-size: 0.82rem;
+    padding: 0.34rem 0.58rem;
+    font-size: 0.74rem;
   }
 
   .code-preview {
@@ -3101,7 +3227,19 @@ button:disabled {
 
   .insert-dialog-backdrop,
   .property-dialog-backdrop {
-    padding: 10px;
+    padding: 8px;
+  }
+
+  .insert-dialog-backdrop {
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 8px;
+  }
+
+  .property-dialog-backdrop {
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 8px;
   }
 
   .insert-dialog,
@@ -3110,7 +3248,32 @@ button:disabled {
   }
 
   .insert-dialog {
-    padding: 14px;
+    width: min(520px, 100%);
+    padding: 12px;
+  }
+
+  .insert-dialog-header {
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .insert-dialog-header h3 {
+    font-size: 0.96rem;
+  }
+
+  .insert-dialog-notice {
+    top: 64px;
+    width: min(320px, calc(100% - 22px));
+    padding: 10px 12px;
+    border-radius: 12px;
+    font-size: 0.84rem;
+  }
+
+  .insert-dialog-notice-close,
+  .dialog-close {
+    width: 32px;
+    height: 32px;
+    font-size: 1.1rem;
   }
 
   .property-dialog-hero,
@@ -3119,16 +3282,180 @@ button:disabled {
     padding-right: 14px;
   }
 
-  .quick-action {
-    min-height: 78px;
-    min-width: 0;
-    padding: 12px 12px;
-    border-radius: 14px;
+  .property-dialog {
+    width: min(520px, 100%);
+    max-height: calc(100vh - 16px);
+    border-radius: 16px;
   }
 
-  .quick-action-label,
-  .insert-column h4,
-  .insert-option,
+  .property-dialog-header {
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  .property-dialog-header h3 {
+    font-size: 0.96rem;
+  }
+
+  .property-dialog-hero {
+    gap: 10px;
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+
+  .property-preview {
+    min-height: 68px;
+  }
+
+  .property-preview .flowchart-node {
+    min-width: 112px;
+    min-height: 40px;
+  }
+
+  .property-description {
+    font-size: 0.86rem;
+    line-height: 1.32;
+  }
+
+  .property-form {
+    gap: 14px;
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+
+  .property-error {
+    top: -8px;
+    width: min(320px, calc(100% - 24px));
+    padding: 10px 12px;
+    border-radius: 12px;
+    font-size: 0.82rem;
+  }
+
+  .property-error-close {
+    width: 28px;
+    height: 28px;
+  }
+
+  .property-field {
+    gap: 6px;
+  }
+
+  .property-field span,
+  .declare-type-group legend,
+  .radio-option,
+  .checkbox-option {
+    font-size: 0.84rem;
+  }
+
+  .property-field input,
+  .property-field textarea {
+    padding: 0.72rem 0.8rem;
+    border-radius: 10px;
+    font-size: 0.88rem;
+  }
+
+  .property-field textarea {
+    min-height: 48px;
+  }
+
+  .property-field.is-output textarea {
+    min-height: 72px;
+  }
+
+  .for-fields-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .declare-fields,
+  .declare-type-grid {
+    gap: 14px;
+  }
+
+  .declare-type-group {
+    gap: 8px;
+  }
+
+  .radio-option input,
+  .checkbox-option input {
+    width: 18px;
+    height: 18px;
+  }
+
+  .property-dialog-actions {
+    gap: 8px;
+  }
+
+  .quick-action {
+    min-height: 68px;
+    min-width: 0;
+    padding: 10px 10px;
+    gap: 8px;
+    border-radius: 12px;
+  }
+
+  .quick-action-label {
+    font-size: 0.82rem;
+  }
+
+  .quick-action-icon {
+    width: 44px;
+    height: 34px;
+  }
+
+  .icon-clipboard {
+    left: 8px;
+    top: 6px;
+    width: 20px;
+    height: 24px;
+  }
+
+  .icon-clipboard::before {
+    top: -6px;
+    left: 3px;
+    width: 10px;
+    height: 7px;
+  }
+
+  .icon-paper {
+    right: 6px;
+    top: 9px;
+    width: 19px;
+    height: 24px;
+  }
+
+  .icon-comment {
+    width: 34px;
+    height: 24px;
+    border-radius: 7px;
+  }
+
+  .icon-comment::after {
+    left: 9px;
+    bottom: -7px;
+    width: 9px;
+    height: 9px;
+  }
+
+  .insert-dialog-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 10px;
+  }
+
+  .insert-column {
+    gap: 10px;
+  }
+
+  .insert-column h4 {
+    font-size: 0.84rem;
+  }
+
+  .insert-option {
+    min-height: 48px;
+    padding: 0.5rem 0.5rem;
+    font-size: 0.84rem;
+  }
+
   .property-field span,
   .radio-option,
   .checkbox-option {
@@ -3137,6 +3464,14 @@ button:disabled {
 
   .property-button {
     min-width: 0;
-    padding: 0.78rem 0.88rem;
+    padding: 0.7rem 0.82rem;
+    font-size: 0.88rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .insert-dialog-actions,
+  .insert-dialog-grid {
+    grid-template-columns: 1fr;
   }
 }

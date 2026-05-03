@@ -221,6 +221,7 @@ let mainViewBeforeFocusMode = null;
 let mobileSidebarView = "terminal";
 let pendingLayoutAwareRenderFrame = null;
 let currentDiagramZoomPreset = null;
+let touchPinchState = null;
 
 const RUNTIME_UNDECLARED = Symbol("runtime-undeclared");
 const MAX_RUNTIME_OPERATIONS = 10000;
@@ -230,9 +231,9 @@ const MIN_DIAGRAM_ZOOM = 0.18;
 const MAX_DIAGRAM_ZOOM = 2.8;
 const DIAGRAM_ZOOM_STEP = 0.1;
 const DIAGRAM_ZOOM_PRESETS = {
-  desktop: 1,
-  compact: 0.88,
-  phone: 0.74,
+  desktop: 0.9,
+  compact: 0.8,
+  phone: 0.68,
 };
 
 const applyDiagramZoom = () => {
@@ -255,6 +256,20 @@ const applyDiagramZoom = () => {
   }
 
   diagramSvg.style.width = `${diagramZoom * 100}%`;
+};
+
+const setDiagramZoom = (nextZoom) => {
+  const normalizedZoom = Math.min(
+    MAX_DIAGRAM_ZOOM,
+    Math.max(MIN_DIAGRAM_ZOOM, Number(nextZoom.toFixed(2)))
+  );
+
+  if (normalizedZoom === diagramZoom) {
+    return;
+  }
+
+  diagramZoom = normalizedZoom;
+  applyDiagramZoom();
 };
 
 const getCurrentDiagramZoomPreset = () => {
@@ -2229,6 +2244,84 @@ const inlineForeignObjectComputedStylesForPdf = (sourceSvg, printableSvg) => {
   });
 };
 
+const cropCanvasWhitespaceForPdf = (sourceCanvas) => {
+  const context = sourceCanvas.getContext("2d");
+
+  if (!context) {
+    return sourceCanvas;
+  }
+
+  const { width, height } = sourceCanvas;
+  const imageData = context.getImageData(0, 0, width, height);
+  const { data } = imageData;
+  const whiteThreshold = 248;
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = (y * width + x) * 4;
+      const alpha = data[index + 3];
+
+      if (alpha === 0) {
+        continue;
+      }
+
+      const red = data[index];
+      const green = data[index + 1];
+      const blue = data[index + 2];
+      const isNearWhite = red >= whiteThreshold && green >= whiteThreshold && blue >= whiteThreshold;
+
+      if (isNearWhite) {
+        continue;
+      }
+
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+
+  if (maxX < minX || maxY < minY) {
+    return sourceCanvas;
+  }
+
+  const padding = 24;
+  const cropX = Math.max(0, minX - padding);
+  const cropY = Math.max(0, minY - padding);
+  const cropWidth = Math.min(width - cropX, maxX - minX + 1 + padding * 2);
+  const cropHeight = Math.min(height - cropY, maxY - minY + 1 + padding * 2);
+  const croppedCanvas = document.createElement("canvas");
+
+  croppedCanvas.width = cropWidth;
+  croppedCanvas.height = cropHeight;
+
+  const croppedContext = croppedCanvas.getContext("2d");
+
+  if (!croppedContext) {
+    return sourceCanvas;
+  }
+
+  croppedContext.fillStyle = "#ffffff";
+  croppedContext.fillRect(0, 0, cropWidth, cropHeight);
+  croppedContext.drawImage(
+    sourceCanvas,
+    cropX,
+    cropY,
+    cropWidth,
+    cropHeight,
+    0,
+    0,
+    cropWidth,
+    cropHeight
+  );
+
+  return croppedCanvas;
+};
+
 const buildPrintableDiagramImageDataUrlForPdf = async () => {
   const diagramSvg = flowchartRoot?.querySelector(".diagram-svg");
 
@@ -2283,7 +2376,7 @@ const buildPrintableDiagramImageDataUrlForPdf = async () => {
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
 
-    return canvas.toDataURL("image/png");
+    return cropCanvasWhitespaceForPdf(canvas).toDataURL("image/png");
   } finally {
     URL.revokeObjectURL(svgUrl);
   }
@@ -2343,8 +2436,31 @@ const buildPrintableDiagramCanvasForPdf = async () => {
       context.fillStyle = "#ffffff";
       context.fillRect(0, 0, canvas.width, canvas.height);
       context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const croppedCanvas = cropCanvasWhitespaceForPdf(canvas);
 
-      return canvas;
+      const headerPaddingTop = Math.round(scale * 32);
+      const headerPaddingLeft = Math.round(scale * 34);
+      const headerPaddingBottom = Math.round(scale * 24);
+      const titleFontSize = Math.round(scale * 34);
+      const compositeCanvas = document.createElement("canvas");
+      compositeCanvas.width = croppedCanvas.width;
+      compositeCanvas.height = croppedCanvas.height + headerPaddingTop + titleFontSize + headerPaddingBottom;
+
+      const compositeContext = compositeCanvas.getContext("2d");
+
+      if (!compositeContext) {
+        throw new Error("Impossibile preparare il canvas finale per l'esportazione PDF.");
+      }
+
+      compositeContext.fillStyle = "#ffffff";
+      compositeContext.fillRect(0, 0, compositeCanvas.width, compositeCanvas.height);
+      compositeContext.fillStyle = "#2f2419";
+      compositeContext.font = `700 ${titleFontSize}px "Space Grotesk", "Manrope", sans-serif`;
+      compositeContext.textBaseline = "top";
+      compositeContext.fillText(ALGOFLOW_APP_NAME, headerPaddingLeft, headerPaddingTop);
+      compositeContext.drawImage(croppedCanvas, 0, headerPaddingTop + titleFontSize + headerPaddingBottom);
+
+      return compositeCanvas;
     } finally {
       URL.revokeObjectURL(svgUrl);
     }
@@ -2369,35 +2485,16 @@ const buildAlgoFlowPdfBytes = async () => {
   const serializedDocument = JSON.stringify(buildAlgoFlowFileDocument(), null, 2);
   const jpegDataUrl = printableCanvas.toDataURL("image/jpeg", 0.92);
   const imageBytes = dataUrlToUint8Array(jpegDataUrl);
-  const exportedDateLabel = new Date().toLocaleDateString("it-IT");
   const pageWidthPoints = 595.28;
   const horizontalMargin = 34;
-  const topMargin = 30;
+  const topMargin = 24;
   const bottomMargin = 28;
-  const headerGap = 20;
-  const titleBaselineOffset = 24;
-  const subtitleBaselineOffset = 26;
   const imageWidthPoints = pageWidthPoints - (horizontalMargin * 2);
   const imageHeightPoints = imageWidthPoints * (printableCanvas.height / printableCanvas.width);
-  const pageHeightPoints = Math.max(220, topMargin + headerGap + imageHeightPoints + bottomMargin);
+  const pageHeightPoints = Math.max(220, topMargin + imageHeightPoints + bottomMargin);
   const imageX = horizontalMargin;
   const imageY = bottomMargin;
-  const titleY = pageHeightPoints - titleBaselineOffset;
-  const subtitleY = pageHeightPoints - subtitleBaselineOffset;
-  const subtitleText = `Diagramma esportato il ${exportedDateLabel}`;
   const contentStream = [
-    "BT",
-    "/F1 28 Tf",
-    "0.184 0.141 0.098 rg",
-    `${formatPdfNumber(horizontalMargin)} ${formatPdfNumber(titleY)} Td`,
-    `(${escapePdfLiteralString(ALGOFLOW_APP_NAME)}) Tj`,
-    "ET",
-    "BT",
-    "/F1 11 Tf",
-    "0.435 0.384 0.325 rg",
-    `${formatPdfNumber(pageWidthPoints - horizontalMargin - 205)} ${formatPdfNumber(subtitleY)} Td`,
-    `(${escapePdfLiteralString(subtitleText)}) Tj`,
-    "ET",
     "q",
     `${formatPdfNumber(imageWidthPoints)} 0 0 ${formatPdfNumber(imageHeightPoints)} ${formatPdfNumber(imageX)} ${formatPdfNumber(imageY)} cm`,
     "/Im1 Do",
@@ -4279,46 +4376,46 @@ const createNodeMarkup = (node) => {
   `;
 };
 
-const SVG_CANVAS_MIN_WIDTH = 940;
-const SVG_TOP_PADDING = 40;
-const SVG_BOTTOM_PADDING = 40;
-const SVG_CONNECTOR_HEIGHT = 42;
-const SVG_TERMINAL_WIDTH = 154;
-const SVG_TERMINAL_HEIGHT = 58;
-const SVG_BRANCH_OFFSET_X = 252;
+const SVG_CANVAS_MIN_WIDTH = 900;
+const SVG_TOP_PADDING = 36;
+const SVG_BOTTOM_PADDING = 36;
+const SVG_CONNECTOR_HEIGHT = 38;
+const SVG_TERMINAL_WIDTH = 146;
+const SVG_TERMINAL_HEIGHT = 54;
+const SVG_BRANCH_OFFSET_X = 236;
 const SVG_IF_LABEL_OFFSET_X = 28;
 const SVG_BRANCH_LABEL_OFFSET_Y = 10;
-const SVG_BRANCH_MIN_HEIGHT = 80;
-const SVG_MERGE_RADIUS = 12;
-const SVG_NESTED_BRANCH_OFFSET_X = 198;
-const SVG_IF_BRANCH_ENTRY_HEIGHT = 32;
-const SVG_IF_BRANCH_EXIT_GAP = 18;
-const SVG_LOOP_BRANCH_OFFSET_X = 224;
-const SVG_LOOP_NESTED_BRANCH_OFFSET_X = 186;
-const SVG_LOOP_BRANCH_ENTRY_HEIGHT = 30;
-const SVG_LOOP_BRANCH_EXIT_GAP = 16;
-const SVG_LOOP_BRANCH_MIN_HEIGHT = 76;
-const SVG_WHILE_RETURN_OFFSET_X = 26;
-const SVG_WHILE_RETURN_DESCENT = 16;
+const SVG_BRANCH_MIN_HEIGHT = 74;
+const SVG_MERGE_RADIUS = 11;
+const SVG_NESTED_BRANCH_OFFSET_X = 186;
+const SVG_IF_BRANCH_ENTRY_HEIGHT = 30;
+const SVG_IF_BRANCH_EXIT_GAP = 16;
+const SVG_LOOP_BRANCH_OFFSET_X = 210;
+const SVG_LOOP_NESTED_BRANCH_OFFSET_X = 174;
+const SVG_LOOP_BRANCH_ENTRY_HEIGHT = 28;
+const SVG_LOOP_BRANCH_EXIT_GAP = 14;
+const SVG_LOOP_BRANCH_MIN_HEIGHT = 70;
+const SVG_WHILE_RETURN_OFFSET_X = 24;
+const SVG_WHILE_RETURN_DESCENT = 14;
 const SVG_WHILE_FALSE_LABEL_OFFSET_X = 18;
 const SVG_WHILE_FALSE_LABEL_OFFSET_Y = 22;
-const SVG_DO_BODY_ENTRY_HEIGHT = 22;
-const SVG_DO_CONDITION_GAP = 30;
-const SVG_DO_LOOP_OFFSET_X = 198;
-const SVG_DO_EXIT_GAP = 18;
+const SVG_DO_BODY_ENTRY_HEIGHT = 20;
+const SVG_DO_CONDITION_GAP = 28;
+const SVG_DO_LOOP_OFFSET_X = 186;
+const SVG_DO_EXIT_GAP = 16;
 
-const SVG_NODE_TEXT_CHAR_WIDTH = 8.2;
-const SVG_NODE_LINE_HEIGHT = 20;
-const SVG_NODE_HORIZONTAL_PADDING = 28;
-const SVG_NODE_VERTICAL_PADDING = 14;
+const SVG_NODE_TEXT_CHAR_WIDTH = 8;
+const SVG_NODE_LINE_HEIGHT = 19;
+const SVG_NODE_HORIZONTAL_PADDING = 24;
+const SVG_NODE_VERTICAL_PADDING = 12;
 
 const SVG_NODE_SIZE_PRESETS = {
-  if: { minWidth: 204, maxWidth: 372, minHeight: 96 },
-  while: { minWidth: 194, maxWidth: 352, minHeight: 68 },
-  for: { minWidth: 194, maxWidth: 352, minHeight: 68 },
-  do: { minWidth: 194, maxWidth: 352, minHeight: 68 },
-  comment: { minWidth: 204, maxWidth: 480, minHeight: 40 },
-  default: { minWidth: 168, maxWidth: 336, minHeight: 52 },
+  if: { minWidth: 192, maxWidth: 348, minHeight: 88 },
+  while: { minWidth: 184, maxWidth: 332, minHeight: 64 },
+  for: { minWidth: 184, maxWidth: 332, minHeight: 64 },
+  do: { minWidth: 184, maxWidth: 332, minHeight: 64 },
+  comment: { minWidth: 192, maxWidth: 452, minHeight: 38 },
+  default: { minWidth: 160, maxWidth: 320, minHeight: 48 },
 };
 
 let svgNodeMeasurementRoot = null;
@@ -6094,20 +6191,14 @@ if (diagramCanvas && selectionBox) {
     event.preventDefault();
 
     const direction = event.deltaY > 0 ? -1 : 1;
-    const nextZoom = Math.min(
-      MAX_DIAGRAM_ZOOM,
-      Math.max(MIN_DIAGRAM_ZOOM, Number((diagramZoom + direction * DIAGRAM_ZOOM_STEP).toFixed(2)))
-    );
-
-    if (nextZoom === diagramZoom) {
-      return;
-    }
-
-    diagramZoom = nextZoom;
-    applyDiagramZoom();
+    setDiagramZoom(diagramZoom + direction * DIAGRAM_ZOOM_STEP);
   }, { passive: false });
 
   diagramCanvas.addEventListener("pointerdown", (event) => {
+    if (event.pointerType === "touch") {
+      return;
+    }
+
     const target = event.target;
     const clickedInteractive =
       target instanceof Element &&
@@ -6221,6 +6312,66 @@ if (diagramCanvas && selectionBox) {
 
   diagramCanvas.addEventListener("pointerup", finishSelectionDrag);
   diagramCanvas.addEventListener("pointercancel", finishSelectionDrag);
+
+  const getTouchDistance = (firstTouch, secondTouch) =>
+    Math.hypot(secondTouch.clientX - firstTouch.clientX, secondTouch.clientY - firstTouch.clientY);
+
+  const getTouchCenter = (firstTouch, secondTouch) => ({
+    x: (firstTouch.clientX + secondTouch.clientX) / 2,
+    y: (firstTouch.clientY + secondTouch.clientY) / 2,
+  });
+
+  diagramCanvas.addEventListener("touchstart", (event) => {
+    if (event.touches.length !== 2) {
+      return;
+    }
+
+    const touchCenter = getTouchCenter(event.touches[0], event.touches[1]);
+
+    touchPinchState = {
+      lastDistance: getTouchDistance(event.touches[0], event.touches[1]),
+      lastZoom: diagramZoom,
+      lastCenterX: touchCenter.x,
+      lastCenterY: touchCenter.y,
+    };
+  }, { passive: true });
+
+  diagramCanvas.addEventListener("touchmove", (event) => {
+    if (event.touches.length !== 2 || !touchPinchState) {
+      return;
+    }
+
+    event.preventDefault();
+    const nextDistance = getTouchDistance(event.touches[0], event.touches[1]);
+    const nextCenter = getTouchCenter(event.touches[0], event.touches[1]);
+
+    if (touchPinchState.lastDistance <= 0 || nextDistance <= 0) {
+      return;
+    }
+
+    const scaleRatio = nextDistance / touchPinchState.lastDistance;
+    const nextZoom = touchPinchState.lastZoom * scaleRatio;
+    const deltaX = nextCenter.x - touchPinchState.lastCenterX;
+    const deltaY = nextCenter.y - touchPinchState.lastCenterY;
+
+    setDiagramZoom(nextZoom);
+    diagramCanvas.scrollLeft -= deltaX;
+    diagramCanvas.scrollTop -= deltaY;
+
+    touchPinchState = {
+      lastDistance: nextDistance,
+      lastZoom: diagramZoom,
+      lastCenterX: nextCenter.x,
+      lastCenterY: nextCenter.y,
+    };
+  }, { passive: false });
+
+  const resetTouchPinch = () => {
+    touchPinchState = null;
+  };
+
+  diagramCanvas.addEventListener("touchend", resetTouchPinch, { passive: true });
+  diagramCanvas.addEventListener("touchcancel", resetTouchPinch, { passive: true });
 }
 
 if (propertyDialogClose) {
