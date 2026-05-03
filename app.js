@@ -1,18 +1,25 @@
 const mainTabs = document.querySelectorAll(".folder-tab");
 const mainViews = document.querySelectorAll(".main-view");
 const languageTabs = document.querySelectorAll(".language-tab");
+const mobileSidebarTabs = document.querySelectorAll(".mobile-sidebar-tab");
+const appShell = document.querySelector(".app-shell");
 const workspace = document.querySelector(".workspace");
 const workspaceResizer = document.querySelector("#workspace-resizer");
 const sidebarContent = document.querySelector(".sidebar-content");
 const sidebarResizer = document.querySelector("#sidebar-resizer");
 const variablesSection = document.querySelector(".variables-section");
+const terminalSection = document.querySelector(".terminal-section");
 const newDiagramButton = document.querySelector("#new-diagram-button");
 const loadDiagramButton = document.querySelector("#load-diagram-button");
 const saveDiagramButton = document.querySelector("#save-diagram-button");
+const undoButton = document.querySelector("#undo-button");
+const redoButton = document.querySelector("#redo-button");
+const focusModeButton = document.querySelector("#focus-mode-button");
 const loadDiagramInput = document.querySelector("#load-diagram-input");
 const runProgramButton = document.querySelector("#run-program-button");
 const stepProgramButton = document.querySelector("#step-program-button");
 const stopProgramButton = document.querySelector("#stop-program-button");
+const themeToggleButton = document.querySelector("#theme-toggle-button");
 const showNodeTypeToggle = document.querySelector("#show-node-type-toggle");
 
 const diagramCanvas = document.querySelector("#diagram-canvas");
@@ -29,6 +36,7 @@ const consoleInputButton = document.querySelector("#console-input-button");
 const insertDialogBackdrop = document.querySelector("#insert-dialog-backdrop");
 const insertDialogClose = document.querySelector("#insert-dialog-close");
 const insertNodeButtons = document.querySelectorAll("[data-node-type]");
+const insertPasteButton = document.querySelector(".quick-action-paste");
 const insertDialogNotice = document.querySelector("#insert-dialog-notice");
 const insertDialogNoticeClose = document.querySelector("#insert-dialog-notice-close");
 const insertDialogNoticeText = document.querySelector("#insert-dialog-notice-text");
@@ -58,9 +66,11 @@ const forEndInput = document.querySelector("#for-end-input");
 const forStepInput = document.querySelector("#for-step-input");
 const propertyForm = document.querySelector("#property-form");
 const STORAGE_KEY = "flowgorithm-web-diagram";
+const HISTORY_STORAGE_KEY = "algoflow-history";
 const NODE_LABEL_PREFERENCE_KEY = "flowgorithm-web-show-node-type";
 const MAIN_VIEW_PREFERENCE_KEY = "algoflow-main-view";
 const CODE_LANGUAGE_PREFERENCE_KEY = "algoflow-code-language";
+const THEME_PREFERENCE_KEY = "algoflow-theme";
 const ALGOFLOW_FILE_FORMAT = "algoflow";
 const ALGOFLOW_FILE_VERSION = 1;
 const ALGOFLOW_FILE_EXTENSION = ".algoflow.json";
@@ -74,6 +84,7 @@ const ALGOFLOW_PICKER_STORE_NAME = "handles";
 const ALGOFLOW_PICKER_HANDLE_KEY = "last-handle";
 const ALGOFLOW_PDF_PAYLOAD_BEGIN = "ALGOFLOW_PAYLOAD_BEGIN";
 const ALGOFLOW_PDF_PAYLOAD_END = "ALGOFLOW_PAYLOAD_END";
+const COMPACT_LAYOUT_BREAKPOINT = 1000;
 const NOT_YET_IMPLEMENTED_MESSAGE = "Questa funzione al momento non è utilizzabile perché non è ancora stata sviluppata.";
 
 const nodeDefinitions = {
@@ -184,7 +195,10 @@ let editingNodeId = null;
 let lastConnectorButton = null;
 let selectedNodeIds = new Set();
 let previewSelectedNodeIds = new Set();
+let flowClipboard = null;
 let selectionDrag = null;
+let undoHistory = [];
+let redoHistory = [];
 let isProgramRunning = false;
 let executionCursor = -1;
 let currentAssignSuggestions = [];
@@ -201,6 +215,12 @@ let isWorkspaceSplitManual = false;
 let isSidebarSplitManual = false;
 let pendingSidebarAutoSyncFrame = null;
 let selectedCodeLanguage = "c";
+let currentTheme = "light";
+let isDiagramFocusMode = false;
+let mainViewBeforeFocusMode = null;
+let mobileSidebarView = "terminal";
+let pendingLayoutAwareRenderFrame = null;
+let currentDiagramZoomPreset = null;
 
 const RUNTIME_UNDECLARED = Symbol("runtime-undeclared");
 const MAX_RUNTIME_OPERATIONS = 10000;
@@ -209,6 +229,11 @@ const SUPPORTED_ASSIGNMENT_OPERATORS = new Set(["=", "+=", "-=", "*=", "/=", "%=
 const MIN_DIAGRAM_ZOOM = 0.18;
 const MAX_DIAGRAM_ZOOM = 2.8;
 const DIAGRAM_ZOOM_STEP = 0.1;
+const DIAGRAM_ZOOM_PRESETS = {
+  desktop: 1,
+  compact: 0.88,
+  phone: 0.74,
+};
 
 const applyDiagramZoom = () => {
   if (!flowchartRoot) {
@@ -230,6 +255,31 @@ const applyDiagramZoom = () => {
   }
 
   diagramSvg.style.width = `${diagramZoom * 100}%`;
+};
+
+const getCurrentDiagramZoomPreset = () => {
+  if (window.innerWidth <= 630) {
+    return "phone";
+  }
+
+  if (window.innerWidth <= COMPACT_LAYOUT_BREAKPOINT) {
+    return "compact";
+  }
+
+  return "desktop";
+};
+
+const syncResponsiveDiagramZoom = (options = {}) => {
+  const { force = false } = options;
+  const nextPreset = getCurrentDiagramZoomPreset();
+
+  if (!force && currentDiagramZoomPreset === nextPreset) {
+    return;
+  }
+
+  currentDiagramZoomPreset = nextPreset;
+  diagramZoom = DIAGRAM_ZOOM_PRESETS[nextPreset] ?? 1;
+  applyDiagramZoom();
 };
 
 const hideInsertDialogNotice = () => {
@@ -263,11 +313,19 @@ const syncPropertyInputSize = () => {
 
   if (propertyInput.dataset.autosize !== "true") {
     propertyInput.style.height = "";
+    propertyInput.style.overflowY = "";
     return;
   }
 
   propertyInput.style.height = "auto";
-  propertyInput.style.height = `${propertyInput.scrollHeight}px`;
+  const computedStyle = window.getComputedStyle(propertyInput);
+  const maxHeight = Number.parseFloat(computedStyle.maxHeight);
+  const targetHeight = Number.isFinite(maxHeight)
+    ? Math.min(propertyInput.scrollHeight, maxHeight)
+    : propertyInput.scrollHeight;
+
+  propertyInput.style.height = `${targetHeight}px`;
+  propertyInput.style.overflowY = propertyInput.scrollHeight > targetHeight ? "auto" : "hidden";
 };
 
 const getStructuredBranchKeys = (type) => {
@@ -363,6 +421,57 @@ const removeNodeById = (nodeId) => {
 
   location.container.splice(location.index, 1);
   return true;
+};
+
+const areNodePathsEqual = (leftPath, rightPath) => {
+  if (leftPath.length !== rightPath.length) {
+    return false;
+  }
+
+  return leftPath.every((segment, index) =>
+    segment.nodeId === rightPath[index]?.nodeId && segment.branchKey === rightPath[index]?.branchKey
+  );
+};
+
+const isAncestorNodeSelected = (nodeId) => {
+  const location = findNodeLocationById(nodeId);
+
+  if (!location) {
+    return false;
+  }
+
+  return location.path.some((segment) => selectedNodeIds.has(segment.nodeId));
+};
+
+const getClipboardSelectionContext = () => {
+  if (selectedNodeIds.size === 0) {
+    return { error: "Seleziona almeno un nodo." };
+  }
+
+  const selectedLocations = Array.from(selectedNodeIds)
+    .filter((nodeId) => !isAncestorNodeSelected(nodeId))
+    .map((nodeId) => findNodeLocationById(nodeId))
+    .filter(Boolean);
+
+  if (selectedLocations.length === 0) {
+    return { error: "La selezione corrente non contiene nodi copiabili." };
+  }
+
+  const [firstLocation] = selectedLocations;
+  const hasMixedContainers = selectedLocations.some((location) => !areNodePathsEqual(location.path, firstLocation.path));
+
+  if (hasMixedContainers) {
+    return { error: "Per copia, taglia e incolla seleziona nodi appartenenti allo stesso blocco o ramo." };
+  }
+
+  selectedLocations.sort((left, right) => left.index - right.index);
+
+  return {
+    path: firstLocation.path,
+    container: firstLocation.container,
+    locations: selectedLocations,
+    nodes: selectedLocations.map((location) => location.node),
+  };
 };
 
 const serializeNode = (node) => {
@@ -473,7 +582,167 @@ const normalizeNode = (rawNode) => {
   return normalizedNode;
 };
 
-const applyPersistedFlowNodes = (rawNodes) => {
+const cloneNodeForClipboard = (node) => {
+  const clonedNode = normalizeNode(serializeNode(node));
+
+  if (!clonedNode) {
+    throw new Error("Impossibile copiare il nodo selezionato.");
+  }
+
+  return clonedNode;
+};
+
+const assignFreshNodeIds = (nodes) => {
+  const assignIds = (nodeList) => {
+    nodeList.forEach((node) => {
+      node.id = nextNodeId;
+      nextNodeId += 1;
+
+      if (node.branches) {
+        Object.values(node.branches).forEach((branchNodes) => assignIds(branchNodes));
+      }
+    });
+  };
+
+  assignIds(nodes);
+  return nodes;
+};
+
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const replaceIdentifierInExpression = (text, fromName, toName) => {
+  if (!text || fromName === toName) {
+    return text;
+  }
+
+  const pattern = new RegExp(`\\b${escapeRegExp(fromName)}\\b`, "g");
+  return text.replace(pattern, toName);
+};
+
+const renameIdentifierInOutputTemplate = (text, fromName, toName) => {
+  if (!text || fromName === toName) {
+    return text;
+  }
+
+  const placeholderPattern = new RegExp(`\\{${escapeRegExp(fromName)}\\}`, "g");
+  return text.replace(placeholderPattern, `{${toName}}`);
+};
+
+const renameIdentifierAcrossNodes = (nodes, fromName, toName) => {
+  traverseNodes(nodes, (node) => {
+    if (node.type === "declare" && node.declareConfig?.names) {
+      node.declareConfig.names = node.declareConfig.names.map((name) => (name === fromName ? toName : name));
+      return;
+    }
+
+    if (node.type === "assign") {
+      const parsedAssignment = parseAssignmentStatement(node.value);
+
+      if (parsedAssignment) {
+        const variableName = parsedAssignment.variableName === fromName ? toName : parsedAssignment.variableName;
+        const expression = replaceIdentifierInExpression(parsedAssignment.expression, fromName, toName);
+        node.value = `${variableName} ${parsedAssignment.operator} ${expression}`.trim();
+      }
+      return;
+    }
+
+    if (node.type === "input") {
+      node.value = node.value.trim() === fromName ? toName : node.value;
+      return;
+    }
+
+    if (node.type === "output") {
+      node.value = renameIdentifierInOutputTemplate(node.value, fromName, toName);
+      return;
+    }
+
+    if (node.type === "if" || node.type === "while" || node.type === "do") {
+      node.value = replaceIdentifierInExpression(node.value, fromName, toName);
+      return;
+    }
+
+    if (node.type === "for") {
+      if (node.forConfig) {
+        node.forConfig.variable = node.forConfig.variable === fromName ? toName : node.forConfig.variable;
+        node.forConfig.start = replaceIdentifierInExpression(node.forConfig.start, fromName, toName);
+        node.forConfig.end = replaceIdentifierInExpression(node.forConfig.end, fromName, toName);
+        node.forConfig.step = replaceIdentifierInExpression(node.forConfig.step, fromName, toName);
+        const { variable, start, end, step } = node.forConfig;
+        node.value = `${variable} = ${start} to < ${end} step ${step}`.replace(/\s+/g, " ").trim();
+      } else {
+        node.value = replaceIdentifierInExpression(node.value, fromName, toName);
+      }
+    }
+  });
+};
+
+const getUniqueDeclaredName = (baseName, unavailableNames) => {
+  let suffix = 2;
+  let candidate = `${baseName}${suffix}`;
+
+  while (unavailableNames.has(candidate) || reservedLanguageNames.has(candidate) || reservedLanguageNames.has(candidate.toLowerCase())) {
+    suffix += 1;
+    candidate = `${baseName}${suffix}`;
+  }
+
+  return candidate;
+};
+
+const resolveClipboardDeclarationConflicts = (nodes) => {
+  const unavailableNames = getDeclaredVariableNameSet();
+  const renamedDeclarations = [];
+
+  traverseNodes(nodes, (node) => {
+    if (node.type !== "declare" || !node.declareConfig?.names) {
+      return;
+    }
+
+    node.declareConfig.names = node.declareConfig.names.map((name) => {
+      if (!unavailableNames.has(name)) {
+        unavailableNames.add(name);
+        return name;
+      }
+
+      const nextName = getUniqueDeclaredName(name, unavailableNames);
+      unavailableNames.add(nextName);
+      renamedDeclarations.push({ from: name, to: nextName });
+      return nextName;
+    });
+  });
+
+  renamedDeclarations.forEach(({ from, to }) => {
+    renameIdentifierAcrossNodes(nodes, from, to);
+  });
+
+  return renamedDeclarations;
+};
+
+const getPasteTargetContext = () => {
+  if (selectedNodeIds.size > 0) {
+    const selectionContext = getClipboardSelectionContext();
+
+    if (selectionContext.error) {
+      return { error: selectionContext.error };
+    }
+
+    const lastLocation = selectionContext.locations[selectionContext.locations.length - 1];
+    return {
+      path: selectionContext.path,
+      container: selectionContext.container,
+      index: lastLocation.index + 1,
+    };
+  }
+
+  return {
+    path: [],
+    container: flowNodes,
+    index: flowNodes.length,
+  };
+};
+
+const applyPersistedFlowNodes = (rawNodes, options = {}) => {
+  const { resetHistory = true } = options;
+
   if (!Array.isArray(rawNodes)) {
     throw new Error("Il file non contiene un elenco di nodi valido.");
   }
@@ -494,6 +763,10 @@ const applyPersistedFlowNodes = (rawNodes) => {
   lastConnectorButton = null;
   selectedNodeIds = new Set();
   previewSelectedNodeIds = new Set();
+  if (resetHistory) {
+    undoHistory = [];
+    redoHistory = [];
+  }
   clearRuntimeSnapshot();
 };
 
@@ -1340,26 +1613,167 @@ const downloadBlobAsFile = (blob, fileName) => {
   }, 0);
 };
 
+const getPersistedFlowNodesSnapshot = () => JSON.stringify(getPersistedFlowNodes());
+
+const saveHistoryState = () => {
+  try {
+    window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify({
+      undoHistory,
+      redoHistory,
+    }));
+  } catch {
+    // Ignore storage failures.
+  }
+};
+
+const loadHistoryState = () => {
+  try {
+    const rawHistory = window.localStorage.getItem(HISTORY_STORAGE_KEY);
+
+    if (!rawHistory) {
+      undoHistory = [];
+      redoHistory = [];
+      return;
+    }
+
+    const parsedHistory = JSON.parse(rawHistory);
+    undoHistory = Array.isArray(parsedHistory?.undoHistory)
+      ? parsedHistory.undoHistory.filter((entry) => typeof entry === "string")
+      : [];
+    redoHistory = Array.isArray(parsedHistory?.redoHistory)
+      ? parsedHistory.redoHistory.filter((entry) => typeof entry === "string")
+      : [];
+  } catch {
+    undoHistory = [];
+    redoHistory = [];
+    window.localStorage.removeItem(HISTORY_STORAGE_KEY);
+  }
+};
+
+const syncUndoButton = () => {
+  if (!undoButton) {
+    return;
+  }
+
+  const canUndo = undoHistory.length > 0 && !isProgramRunning;
+  undoButton.disabled = !canUndo;
+  undoButton.setAttribute("aria-disabled", String(!canUndo));
+  undoButton.title = canUndo ? "Annulla l'ultima modifica (Ctrl+Z)" : "Nessuna modifica da annullare";
+
+  if (redoButton) {
+    const canRedo = redoHistory.length > 0 && !isProgramRunning;
+    redoButton.disabled = !canRedo;
+    redoButton.setAttribute("aria-disabled", String(!canRedo));
+    redoButton.title = canRedo ? "Ripristina l'ultima modifica annullata (Ctrl+Y)" : "Nessuna modifica da ripristinare";
+  }
+};
+
+const pushUndoSnapshot = () => {
+  const snapshot = getPersistedFlowNodesSnapshot();
+
+  if (undoHistory[undoHistory.length - 1] === snapshot) {
+    syncUndoButton();
+    return;
+  }
+
+  undoHistory.push(snapshot);
+  redoHistory = [];
+
+  if (undoHistory.length > 100) {
+    undoHistory = undoHistory.slice(-100);
+  }
+
+  saveHistoryState();
+  syncUndoButton();
+};
+
+const getAlgoFlowSaveError = (error) => {
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return error;
+  }
+
+  const rawMessage = error instanceof Error ? error.message : String(error ?? "");
+  const normalizedMessage = rawMessage.toLowerCase();
+
+  if (
+    normalizedMessage.includes("access denied") ||
+    normalizedMessage.includes("permission denied") ||
+    normalizedMessage.includes("being used by another process") ||
+    normalizedMessage.includes("used by another process") ||
+    normalizedMessage.includes("process cannot access the file") ||
+    normalizedMessage.includes("the requested file could not be locked") ||
+    normalizedMessage.includes("locked")
+  ) {
+    return new Error("Impossibile salvare il file perché è già aperto o bloccato da un altro programma. Chiudilo e riprova.");
+  }
+
+  if (error instanceof Error && rawMessage.trim()) {
+    return error;
+  }
+
+  return new Error("Impossibile completare il salvataggio.");
+};
+
+const buildAlgoFlowSavePayload = async (format) => {
+  if (format === "pdf") {
+    const bytes = await buildAlgoFlowPdfBytes();
+    return {
+      format,
+      data: bytes,
+    };
+  }
+
+  if (format === "fprg") {
+    const text = buildFlowgorithmXmlDocument();
+    return {
+      format,
+      data: text,
+    };
+  }
+
+  const text = JSON.stringify(buildAlgoFlowFileDocument(), null, 2);
+  return {
+    format: "json",
+    data: text,
+  };
+};
+
 const exportFlowchartWithPicker = async () => {
   if (typeof window.showSaveFilePicker === "function") {
     const pickerOptions = await buildAlgoFlowSavePickerOptions();
     const fileHandle = await window.showSaveFilePicker({
       ...pickerOptions,
-      suggestedName: getSuggestedDiagramFileName(),
+      suggestedName: getSuggestedPdfFileName(),
     });
     const selectedFormat = getSaveFormatFromHandle(fileHandle, pickerOptions.types);
-    const writable = await fileHandle.createWritable();
+    const payload = await buildAlgoFlowSavePayload(selectedFormat);
+
+    if (selectedFormat === "pdf") {
+      try {
+        const existingFile = await fileHandle.getFile();
+
+        if (existingFile.size > 0) {
+          window.alert("Stai sovrascrivendo un PDF esistente. Se è aperto in un altro programma, il salvataggio potrebbe non riuscire: chiudilo prima di continuare.");
+        }
+      } catch {
+        // Ignore missing file / unreadable pre-checks.
+      }
+    }
+
+    let writable;
 
     try {
-      if (selectedFormat === "pdf") {
-        await writable.write(await buildAlgoFlowPdfBytes());
-      } else if (selectedFormat === "fprg") {
-        await writable.write(buildFlowgorithmXmlDocument());
-      } else {
-        await writable.write(JSON.stringify(buildAlgoFlowFileDocument(), null, 2));
-      }
-    } finally {
+      writable = await fileHandle.createWritable();
+      await writable.write(payload.data);
       await writable.close();
+    } catch (error) {
+      try {
+        await writable?.abort?.();
+      } catch {
+        // Ignore abort failures after a write error.
+      }
+
+      throw getAlgoFlowSaveError(error);
     }
 
     await saveLastAlgoFlowPickerHandle(fileHandle).catch(() => {});
@@ -1368,7 +1782,7 @@ const exportFlowchartWithPicker = async () => {
 
   const selectedFormat = window.prompt(
     "Scegli il formato di salvataggio: json, fprg oppure pdf",
-    "json"
+    "pdf"
   );
 
   if (!selectedFormat) {
@@ -1419,7 +1833,8 @@ const importFlowchartFromJsonText = (rawText) => {
   removeDraftNode();
   closePropertyDialog({ restoreFocus: false });
   closeInsertDialog();
-  applyPersistedFlowNodes(persistedNodes);
+  pushUndoSnapshot();
+  applyPersistedFlowNodes(persistedNodes, { resetHistory: false });
 
   if (
     documentData &&
@@ -1587,9 +2002,66 @@ const collectDocumentStylesForPdfSvg = () => {
 
 const simplifySvgLabelsForPdf = (printableSvg) => {
   const svgNamespace = "http://www.w3.org/2000/svg";
+  const measurementCanvas = document.createElement("canvas");
+  const measurementContext = measurementCanvas.getContext("2d");
+
+  const measureTextWidth = (text, font) => {
+    if (!measurementContext) {
+      return text.length * 8;
+    }
+
+    measurementContext.font = font;
+    return measurementContext.measureText(text).width;
+  };
+
+  const wrapTextLines = (text, maxWidth, font) => {
+    const paragraphs = String(text ?? "").split("\n");
+    const lines = [];
+
+    paragraphs.forEach((paragraph) => {
+      const words = paragraph.split(/\s+/).filter(Boolean);
+
+      if (words.length === 0) {
+        lines.push("");
+        return;
+      }
+
+      let currentLine = "";
+
+      words.forEach((word) => {
+        const nextLine = currentLine ? `${currentLine} ${word}` : word;
+
+        if (!currentLine || measureTextWidth(nextLine, font) <= maxWidth) {
+          currentLine = nextLine;
+          return;
+        }
+
+        lines.push(currentLine);
+        currentLine = word;
+      });
+
+      if (currentLine) {
+        lines.push(currentLine);
+      }
+    });
+
+    return lines.length > 0 ? lines : [""];
+  };
 
   printableSvg.querySelectorAll("foreignObject").forEach((foreignObject) => {
-    const textContent = foreignObject.textContent?.replace(/\s+/g, " ").trim() ?? "";
+    const isTerminal = foreignObject.closest(".svg-terminal-node");
+    const isComment = foreignObject.closest(".svg-node-comment");
+    const nodeGroup = foreignObject.closest(".svg-node");
+    const nodeId = Number(nodeGroup?.getAttribute("data-node-id") ?? "");
+    const sourceNode = Number.isFinite(nodeId) ? findNodeById(nodeId) : null;
+    const rawText = sourceNode
+      ? getNodeDisplayText(sourceNode)
+      : (foreignObject.textContent || "");
+    const textContent = String(rawText ?? "")
+      .replace(/\r\n/g, "\n")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n[ \t]+/g, "\n")
+      .trim();
 
     if (!textContent) {
       foreignObject.remove();
@@ -1600,18 +2072,38 @@ const simplifySvgLabelsForPdf = (printableSvg) => {
     const y = Number(foreignObject.getAttribute("y") ?? "0");
     const width = Number(foreignObject.getAttribute("width") ?? "0");
     const height = Number(foreignObject.getAttribute("height") ?? "0");
-    const isTerminal = foreignObject.closest(".svg-terminal-node");
-
+    const fontFamily = isTerminal ? "Georgia, serif" : "Arial, sans-serif";
+    const fontSize = isTerminal ? 22 : 16;
+    const fontWeight = isTerminal ? "600" : "700";
+    const lineHeight = isTerminal ? 26 : (isComment ? 19 : 20);
+    const font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+    const horizontalPadding = isComment ? 4 : 2;
+    const verticalPadding = isTerminal ? 2 : (isComment ? 6 : 8);
+    const wrappedLines = wrapTextLines(textContent, Math.max(width - horizontalPadding * 2, 12), font);
+    const blockHeight = wrappedLines.length * lineHeight;
     const textNode = document.createElementNS(svgNamespace, "text");
-    textNode.setAttribute("x", String(x + width / 2));
-    textNode.setAttribute("y", String(y + height / 2));
-    textNode.setAttribute("text-anchor", "middle");
-    textNode.setAttribute("dominant-baseline", "middle");
+    const textX = isComment ? x + horizontalPadding : x + width / 2;
+    const availableHeight = Math.max(height - verticalPadding * 2, fontSize);
+    const startY = isComment
+      ? y + verticalPadding
+      : y + verticalPadding + Math.max((availableHeight - blockHeight) / 2, 0);
+
+    textNode.setAttribute("x", String(textX));
+    textNode.setAttribute("y", String(startY));
+    textNode.setAttribute("text-anchor", isComment ? "start" : "middle");
+    textNode.setAttribute("dominant-baseline", "hanging");
     textNode.setAttribute("fill", "#2f2419");
-    textNode.setAttribute("font-family", isTerminal ? "Georgia, serif" : "Arial, sans-serif");
-    textNode.setAttribute("font-size", isTerminal ? "22" : "16");
-    textNode.setAttribute("font-weight", isTerminal ? "600" : "700");
-    textNode.textContent = textContent;
+    textNode.setAttribute("font-family", fontFamily);
+    textNode.setAttribute("font-size", String(fontSize));
+    textNode.setAttribute("font-weight", fontWeight);
+
+    wrappedLines.forEach((line, index) => {
+      const tspan = document.createElementNS(svgNamespace, "tspan");
+      tspan.setAttribute("x", String(textX));
+      tspan.setAttribute("dy", index === 0 ? "0" : String(lineHeight));
+      tspan.textContent = line || "\u00A0";
+      textNode.append(tspan);
+    });
 
     foreignObject.replaceWith(textNode);
   });
@@ -1664,6 +2156,75 @@ const inlineSvgComputedStylesForPdf = (sourceSvg, printableSvg) => {
           printableNode.style.setProperty(propertyName, propertyValue);
         }
       });
+    });
+  });
+};
+
+const inlineForeignObjectComputedStylesForPdf = (sourceSvg, printableSvg) => {
+  const sourceForeignObjects = Array.from(sourceSvg.querySelectorAll("foreignObject"));
+  const printableForeignObjects = Array.from(printableSvg.querySelectorAll("foreignObject"));
+  const copiedProperties = [
+    "display",
+    "width",
+    "height",
+    "padding",
+    "margin",
+    "box-sizing",
+    "align-items",
+    "justify-content",
+    "align-self",
+    "text-align",
+    "white-space",
+    "overflow",
+    "overflow-wrap",
+    "word-break",
+    "font-size",
+    "font-weight",
+    "line-height",
+    "letter-spacing",
+    "color",
+    "background",
+    "border",
+    "border-radius",
+  ];
+
+  sourceForeignObjects.forEach((sourceForeignObject, index) => {
+    const printableForeignObject = printableForeignObjects[index];
+
+    if (!(sourceForeignObject instanceof SVGForeignObjectElement) || !(printableForeignObject instanceof SVGForeignObjectElement)) {
+      return;
+    }
+
+    const sourceHtmlNodes = [
+      sourceForeignObject.firstElementChild,
+      ...sourceForeignObject.querySelectorAll("*"),
+    ].filter(Boolean);
+    const printableHtmlNodes = [
+      printableForeignObject.firstElementChild,
+      ...printableForeignObject.querySelectorAll("*"),
+    ].filter(Boolean);
+
+    sourceHtmlNodes.forEach((sourceNode, htmlIndex) => {
+      const printableNode = printableHtmlNodes[htmlIndex];
+
+      if (!(sourceNode instanceof HTMLElement) || !(printableNode instanceof HTMLElement)) {
+        return;
+      }
+
+      const computedStyle = window.getComputedStyle(sourceNode);
+      copiedProperties.forEach((propertyName) => {
+        const propertyValue = computedStyle.getPropertyValue(propertyName).trim();
+
+        if (propertyValue) {
+          printableNode.style.setProperty(propertyName, propertyValue);
+        }
+      });
+
+      if (sourceNode.classList.contains("svg-terminal-label")) {
+        printableNode.style.setProperty("font-family", "Georgia, serif");
+      } else {
+        printableNode.style.setProperty("font-family", "Arial, sans-serif");
+      }
     });
   });
 };
@@ -1729,63 +2290,65 @@ const buildPrintableDiagramImageDataUrlForPdf = async () => {
 };
 
 const buildPrintableDiagramCanvasForPdf = async () => {
-  const diagramSvg = flowchartRoot?.querySelector(".diagram-svg");
+  return runWithTemporaryTheme("light", async () => {
+    const diagramSvg = flowchartRoot?.querySelector(".diagram-svg");
 
-  if (!(diagramSvg instanceof SVGElement)) {
-    throw new Error("Non c'è alcun diagramma da esportare in PDF.");
-  }
-
-  const printableSvg = diagramSvg.cloneNode(true);
-  const viewBox = printableSvg.viewBox.baseVal;
-
-  if (!viewBox || !viewBox.width || !viewBox.height) {
-    throw new Error("Il diagramma non ha dimensioni esportabili.");
-  }
-
-  printableSvg.removeAttribute("id");
-  printableSvg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-  printableSvg.setAttribute("xmlns:xhtml", "http://www.w3.org/1999/xhtml");
-  printableSvg.setAttribute("width", String(viewBox.width));
-  printableSvg.setAttribute("height", String(viewBox.height));
-  inlineSvgComputedStylesForPdf(diagramSvg, printableSvg);
-  simplifySvgLabelsForPdf(printableSvg);
-
-  const styleNode = document.createElementNS("http://www.w3.org/2000/svg", "style");
-  styleNode.textContent = collectDocumentStylesForPdfSvg();
-  printableSvg.insertBefore(styleNode, printableSvg.firstChild);
-
-  const serializedSvg = new XMLSerializer().serializeToString(printableSvg);
-  const svgBlob = new Blob([serializedSvg], { type: "image/svg+xml;charset=utf-8" });
-  const svgUrl = URL.createObjectURL(svgBlob);
-
-  try {
-    const image = await new Promise((resolve, reject) => {
-      const nextImage = new Image();
-
-      nextImage.onload = () => resolve(nextImage);
-      nextImage.onerror = () => reject(new Error("Impossibile renderizzare il diagramma per il PDF."));
-      nextImage.src = svgUrl;
-    });
-
-    const scale = 2;
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(viewBox.width * scale);
-    canvas.height = Math.round(viewBox.height * scale);
-
-    const context = canvas.getContext("2d");
-
-    if (!context) {
-      throw new Error("Impossibile preparare il canvas per l'esportazione PDF.");
+    if (!(diagramSvg instanceof SVGElement)) {
+      throw new Error("Non c'è alcun diagramma da esportare in PDF.");
     }
 
-    context.fillStyle = "#ffffff";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const printableSvg = diagramSvg.cloneNode(true);
+    const viewBox = printableSvg.viewBox.baseVal;
 
-    return canvas;
-  } finally {
-    URL.revokeObjectURL(svgUrl);
-  }
+    if (!viewBox || !viewBox.width || !viewBox.height) {
+      throw new Error("Il diagramma non ha dimensioni esportabili.");
+    }
+
+    printableSvg.removeAttribute("id");
+    printableSvg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    printableSvg.setAttribute("xmlns:xhtml", "http://www.w3.org/1999/xhtml");
+    printableSvg.setAttribute("width", String(viewBox.width));
+    printableSvg.setAttribute("height", String(viewBox.height));
+    inlineSvgComputedStylesForPdf(diagramSvg, printableSvg);
+    simplifySvgLabelsForPdf(printableSvg);
+
+    const styleNode = document.createElementNS("http://www.w3.org/2000/svg", "style");
+    styleNode.textContent = collectDocumentStylesForPdfSvg();
+    printableSvg.insertBefore(styleNode, printableSvg.firstChild);
+
+    const serializedSvg = new XMLSerializer().serializeToString(printableSvg);
+    const svgBlob = new Blob([serializedSvg], { type: "image/svg+xml;charset=utf-8" });
+    const svgUrl = URL.createObjectURL(svgBlob);
+
+    try {
+      const image = await new Promise((resolve, reject) => {
+        const nextImage = new Image();
+
+        nextImage.onload = () => resolve(nextImage);
+        nextImage.onerror = () => reject(new Error("Impossibile renderizzare il diagramma per il PDF."));
+        nextImage.src = svgUrl;
+      });
+
+      const scale = 2;
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(viewBox.width * scale);
+      canvas.height = Math.round(viewBox.height * scale);
+
+      const context = canvas.getContext("2d");
+
+      if (!context) {
+        throw new Error("Impossibile preparare il canvas per l'esportazione PDF.");
+      }
+
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+      return canvas;
+    } finally {
+      URL.revokeObjectURL(svgUrl);
+    }
+  });
 };
 
 const buildEmbeddedAlgoFlowPdfPayloadComment = (serializedDocument) => {
@@ -1911,6 +2474,65 @@ const buildAlgoFlowPdfBytes = async () => {
 
 const saveFlowchartState = () => {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(getPersistedFlowNodes()));
+  saveHistoryState();
+};
+
+const undoLastChange = () => {
+  if (isProgramRunning || undoHistory.length === 0) {
+    return;
+  }
+
+  const currentSnapshot = getPersistedFlowNodesSnapshot();
+  const snapshot = undoHistory.pop();
+
+  if (!snapshot) {
+    syncUndoButton();
+    return;
+  }
+
+  try {
+    const parsedNodes = JSON.parse(snapshot);
+    redoHistory.push(currentSnapshot);
+    closePropertyDialog({ restoreFocus: false });
+    closeInsertDialog();
+    applyPersistedFlowNodes(parsedNodes, { resetHistory: false });
+    saveFlowchartState();
+    renderFlowchart();
+  } catch {
+    window.alert("Impossibile annullare l'ultima modifica.");
+  } finally {
+    saveHistoryState();
+    syncUndoButton();
+  }
+};
+
+const redoLastChange = () => {
+  if (isProgramRunning || redoHistory.length === 0) {
+    return;
+  }
+
+  const currentSnapshot = getPersistedFlowNodesSnapshot();
+  const snapshot = redoHistory.pop();
+
+  if (!snapshot) {
+    syncUndoButton();
+    return;
+  }
+
+  try {
+    const parsedNodes = JSON.parse(snapshot);
+    undoHistory.push(currentSnapshot);
+    closePropertyDialog({ restoreFocus: false });
+    closeInsertDialog();
+    applyPersistedFlowNodes(parsedNodes, { resetHistory: false });
+    saveFlowchartState();
+    renderFlowchart();
+  } catch {
+    window.alert("Impossibile ripristinare la modifica annullata.");
+  } finally {
+    saveHistoryState();
+    syncUndoButton();
+  }
 };
 
 const loadFlowchartState = () => {
@@ -1948,6 +2570,11 @@ const loadNodeLabelPreference = () => {
 
 const saveNodeLabelPreference = () => {
   window.localStorage.setItem(NODE_LABEL_PREFERENCE_KEY, String(showNodeTypeInLabel));
+};
+
+const getActiveMainViewId = () => {
+  const activeView = Array.from(mainViews).find((view) => view.classList.contains("is-active"));
+  return activeView?.id ?? "diagram-view";
 };
 
 const setActiveMainView = (targetId) => {
@@ -1995,6 +2622,75 @@ const saveMainViewPreference = (targetId) => {
   }
 };
 
+const syncFocusModeButton = () => {
+  if (!focusModeButton) {
+    return;
+  }
+
+  focusModeButton.classList.toggle("is-active", isDiagramFocusMode);
+  focusModeButton.textContent = isDiagramFocusMode ? "Esci" : "Focus";
+  focusModeButton.title = isDiagramFocusMode ? "Esci dalla modalita focus (Esc)" : "Modalita focus diagramma (F)";
+  focusModeButton.setAttribute("aria-pressed", String(isDiagramFocusMode));
+};
+
+const setDiagramFocusMode = (nextValue) => {
+  const shouldEnable = Boolean(nextValue);
+
+  if (isDiagramFocusMode === shouldEnable) {
+    return;
+  }
+
+  if (shouldEnable) {
+    const activeMainViewId = getActiveMainViewId();
+    mainViewBeforeFocusMode = activeMainViewId === "diagram-view" ? null : activeMainViewId;
+    setActiveMainView("diagram-view");
+  } else if (mainViewBeforeFocusMode) {
+    setActiveMainView(mainViewBeforeFocusMode);
+    mainViewBeforeFocusMode = null;
+  }
+
+  isDiagramFocusMode = shouldEnable;
+  appShell?.classList.toggle("is-focus-mode", isDiagramFocusMode);
+  syncFocusModeButton();
+  renderFlowchart();
+};
+
+const syncMobileSidebarView = () => {
+  const isMobile = window.innerWidth <= COMPACT_LAYOUT_BREAKPOINT;
+
+  mobileSidebarTabs.forEach((tab) => {
+    const isActive = tab.dataset.sidebarTarget === mobileSidebarView;
+    tab.classList.toggle("is-active", isActive);
+    tab.setAttribute("aria-selected", String(isActive));
+  });
+
+  if (!variablesSection || !terminalSection) {
+    return;
+  }
+
+  if (!isMobile) {
+    variablesSection.classList.remove("is-mobile-hidden");
+    terminalSection.classList.remove("is-mobile-hidden");
+    return;
+  }
+
+  variablesSection.classList.toggle("is-mobile-hidden", mobileSidebarView !== "variables");
+  terminalSection.classList.toggle("is-mobile-hidden", mobileSidebarView !== "terminal");
+};
+
+const scheduleLayoutAwareRender = () => {
+  if (pendingLayoutAwareRenderFrame !== null) {
+    cancelAnimationFrame(pendingLayoutAwareRenderFrame);
+  }
+
+  pendingLayoutAwareRenderFrame = requestAnimationFrame(() => {
+    pendingLayoutAwareRenderFrame = requestAnimationFrame(() => {
+      pendingLayoutAwareRenderFrame = null;
+      renderFlowchart();
+    });
+  });
+};
+
 const loadCodeLanguagePreference = () => {
   try {
     const storedValue = window.localStorage.getItem(CODE_LANGUAGE_PREFERENCE_KEY);
@@ -2014,6 +2710,59 @@ const saveCodeLanguagePreference = () => {
   }
 };
 
+const syncThemeToggleButton = () => {
+  if (!themeToggleButton) {
+    return;
+  }
+
+  const isDark = currentTheme === "dark";
+  themeToggleButton.textContent = isDark ? "Light" : "Dark";
+  themeToggleButton.title = isDark ? "Passa al tema chiaro" : "Passa al tema scuro";
+};
+
+const applyTheme = (theme) => {
+  currentTheme = theme === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = currentTheme;
+  syncThemeToggleButton();
+};
+
+const loadThemePreference = () => {
+  try {
+    const storedValue = window.localStorage.getItem(THEME_PREFERENCE_KEY);
+    applyTheme(storedValue === "dark" ? "dark" : "light");
+  } catch {
+    applyTheme("light");
+  }
+};
+
+const saveThemePreference = () => {
+  try {
+    window.localStorage.setItem(THEME_PREFERENCE_KEY, currentTheme);
+  } catch {
+    // Ignore storage failures.
+  }
+};
+
+const runWithTemporaryTheme = async (temporaryTheme, task) => {
+  const previousTheme = currentTheme;
+
+  if (previousTheme !== temporaryTheme) {
+    applyTheme(temporaryTheme);
+    renderFlowchart();
+    await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+    await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  }
+
+  try {
+    return await task();
+  } finally {
+    if (previousTheme !== temporaryTheme) {
+      applyTheme(previousTheme);
+      renderFlowchart();
+    }
+  }
+};
+
 const getNodeLabelPrefix = (node) => {
   const definition = getNodeDefinition(node.type);
   return showNodeTypeInLabel && definition ? `${definition.label}: ` : "";
@@ -2021,7 +2770,25 @@ const getNodeLabelPrefix = (node) => {
 
 const getNodeLabelPrefixMarkup = (node) => {
   const prefix = getNodeLabelPrefix(node);
-  return prefix ? `${escapeHtml(prefix.slice(0, -1))}&nbsp;` : "";
+  return prefix ? escapeHtml(prefix.slice(0, -1)) : "";
+};
+
+const getNodeBodyText = (node) => {
+  if (node.type === "declare" && node.declareConfig) {
+    const typeLabel = node.declareConfig.isArray ? `${node.declareConfig.dataType}[]` : node.declareConfig.dataType;
+    return `${typeLabel} ${node.declareConfig.names.join(", ")}`.trim();
+  }
+
+  if (node.type === "for" && node.forConfig) {
+    const { variable, start, end, step } = node.forConfig;
+    return `${variable} = ${start} to < ${end} step ${step}`.replace(/\s+/g, " ").trim();
+  }
+
+  if (typeof node.value === "string" && node.value.trim()) {
+    return node.value.trim();
+  }
+
+  return "";
 };
 
 mainTabs.forEach((tab) => {
@@ -2052,6 +2819,19 @@ languageTabs.forEach((tab) => {
     saveCodeLanguagePreference();
     syncCodeLanguageTabs();
     renderCodePreview();
+  });
+});
+
+mobileSidebarTabs.forEach((tab) => {
+  tab.addEventListener("click", () => {
+    const target = tab.dataset.sidebarTarget;
+
+    if (!target || target === mobileSidebarView) {
+      return;
+    }
+
+    mobileSidebarView = target === "variables" ? "variables" : "terminal";
+    syncMobileSidebarView();
   });
 });
 
@@ -3286,34 +4066,24 @@ const renderVariablesPanel = () => {
 
 const getNodeDisplayText = (node) => {
   const prefix = getNodeLabelPrefix(node);
+  const bodyText = getNodeBodyText(node);
 
-  if (node.type === "declare" && node.declareConfig) {
-    const typeLabel = node.declareConfig.isArray ? `${node.declareConfig.dataType}[]` : node.declareConfig.dataType;
-    return `${prefix}${typeLabel} ${node.declareConfig.names.join(", ")}`.trim();
+  if (!bodyText) {
+    return prefix.slice(0, -1);
   }
 
-  if (node.type === "for" && node.forConfig) {
-    const { variable, start, end, step } = node.forConfig;
-    return `${prefix}${variable} = ${start} to < ${end} step ${step}`.replace(/\s+/g, " ").trim();
-  }
-
-  if (node.value && node.value.trim()) {
-    if (node.type === "comment") {
-      return showNodeTypeInLabel ? `${prefix}${node.value.trim()}` : `// ${node.value.trim()}`;
-    }
-
-    return `${prefix}${node.value.trim()}`.trim();
-  }
-
-  return "";
+  return `${prefix}${bodyText}`.trim();
 };
 
 const getNodeMarkup = (node) => {
   const displayText = getNodeDisplayText(node);
+  const bodyText = getNodeBodyText(node);
   const declaredNames = getDeclaredVariableNameSet();
   const prefixMarkup = getNodeLabelPrefixMarkup(node);
+  const wrapNodeLabelContent = (content) => `<span class="node-label-content">${content}</span>`;
+  const inlinePrefixMarkup = prefixMarkup ? `${prefixMarkup}&nbsp;` : "";
 
-  if (!displayText) {
+  if (!displayText && !bodyText) {
     return '<span aria-hidden="true">&nbsp;</span>';
   }
 
@@ -3326,7 +4096,7 @@ const getNodeMarkup = (node) => {
         ? escapeHtml(variableName)
         : `<span class="invalid-variable">${escapeHtml(variableName)}</span>`;
 
-      return `${prefixMarkup}${variableMarkup} ${escapeHtml(operator)} ${highlightUndeclaredVariablesInText(expression, declaredNames)}`;
+      return wrapNodeLabelContent(`${inlinePrefixMarkup}${variableMarkup} ${escapeHtml(operator)} ${highlightUndeclaredVariablesInText(expression, declaredNames)}`);
     }
   }
 
@@ -3334,25 +4104,29 @@ const getNodeMarkup = (node) => {
     const variableName = node.value.trim();
 
     if (variableName && !declaredNames.has(variableName)) {
-      return `${prefixMarkup}<span class="invalid-variable">${escapeHtml(variableName)}</span>`;
+      return wrapNodeLabelContent(`${inlinePrefixMarkup}<span class="invalid-variable">${escapeHtml(variableName)}</span>`);
     }
 
-    return `${prefixMarkup}${escapeHtml(variableName)}`;
+    return wrapNodeLabelContent(`${inlinePrefixMarkup}${escapeHtml(variableName)}`);
   }
 
   if (node.type === "output" && node.value) {
-    return `${prefixMarkup}${highlightOutputTemplateText(node.value, declaredNames)}`;
+    return wrapNodeLabelContent(`${inlinePrefixMarkup}${highlightOutputTemplateText(node.value, declaredNames)}`);
+  }
+
+  if (node.type === "comment" && bodyText) {
+    return wrapNodeLabelContent(`${inlinePrefixMarkup}${escapeHtml(bodyText)}`);
   }
 
   if ((node.type === "if" || node.type === "while" || node.type === "do") && node.value) {
-    return `${prefixMarkup}${highlightUndeclaredVariablesInText(node.value, declaredNames)}`;
+    return wrapNodeLabelContent(`${inlinePrefixMarkup}${highlightUndeclaredVariablesInText(node.value, declaredNames)}`);
   }
 
   if (node.type === "for" && node.value) {
-    return `${prefixMarkup}${highlightUndeclaredVariablesInText(node.value, declaredNames)}`;
+    return wrapNodeLabelContent(`${inlinePrefixMarkup}${highlightUndeclaredVariablesInText(node.value, declaredNames)}`);
   }
 
-  return escapeHtml(displayText);
+  return wrapNodeLabelContent(escapeHtml(displayText));
 };
 
 const encodeInsertTarget = (path, index) => encodeURIComponent(JSON.stringify({ path, index }));
@@ -3505,46 +4279,67 @@ const createNodeMarkup = (node) => {
   `;
 };
 
-const SVG_CANVAS_MIN_WIDTH = 1040;
-const SVG_TOP_PADDING = 48;
-const SVG_BOTTOM_PADDING = 48;
-const SVG_CONNECTOR_HEIGHT = 48;
-const SVG_TERMINAL_WIDTH = 170;
-const SVG_TERMINAL_HEIGHT = 64;
-const SVG_BRANCH_OFFSET_X = 280;
+const SVG_CANVAS_MIN_WIDTH = 940;
+const SVG_TOP_PADDING = 40;
+const SVG_BOTTOM_PADDING = 40;
+const SVG_CONNECTOR_HEIGHT = 42;
+const SVG_TERMINAL_WIDTH = 154;
+const SVG_TERMINAL_HEIGHT = 58;
+const SVG_BRANCH_OFFSET_X = 252;
 const SVG_IF_LABEL_OFFSET_X = 28;
 const SVG_BRANCH_LABEL_OFFSET_Y = 10;
-const SVG_BRANCH_MIN_HEIGHT = 88;
-const SVG_MERGE_RADIUS = 14;
-const SVG_NESTED_BRANCH_OFFSET_X = 220;
-const SVG_IF_BRANCH_ENTRY_HEIGHT = 36;
-const SVG_IF_BRANCH_EXIT_GAP = 20;
-const SVG_LOOP_BRANCH_OFFSET_X = 250;
-const SVG_LOOP_NESTED_BRANCH_OFFSET_X = 205;
-const SVG_LOOP_BRANCH_ENTRY_HEIGHT = 34;
-const SVG_LOOP_BRANCH_EXIT_GAP = 18;
-const SVG_LOOP_BRANCH_MIN_HEIGHT = 84;
-const SVG_WHILE_RETURN_OFFSET_X = 30;
-const SVG_WHILE_RETURN_DESCENT = 18;
+const SVG_BRANCH_MIN_HEIGHT = 80;
+const SVG_MERGE_RADIUS = 12;
+const SVG_NESTED_BRANCH_OFFSET_X = 198;
+const SVG_IF_BRANCH_ENTRY_HEIGHT = 32;
+const SVG_IF_BRANCH_EXIT_GAP = 18;
+const SVG_LOOP_BRANCH_OFFSET_X = 224;
+const SVG_LOOP_NESTED_BRANCH_OFFSET_X = 186;
+const SVG_LOOP_BRANCH_ENTRY_HEIGHT = 30;
+const SVG_LOOP_BRANCH_EXIT_GAP = 16;
+const SVG_LOOP_BRANCH_MIN_HEIGHT = 76;
+const SVG_WHILE_RETURN_OFFSET_X = 26;
+const SVG_WHILE_RETURN_DESCENT = 16;
 const SVG_WHILE_FALSE_LABEL_OFFSET_X = 18;
 const SVG_WHILE_FALSE_LABEL_OFFSET_Y = 22;
-const SVG_DO_BODY_ENTRY_HEIGHT = 24;
-const SVG_DO_CONDITION_GAP = 34;
-const SVG_DO_LOOP_OFFSET_X = 220;
-const SVG_DO_EXIT_GAP = 20;
+const SVG_DO_BODY_ENTRY_HEIGHT = 22;
+const SVG_DO_CONDITION_GAP = 30;
+const SVG_DO_LOOP_OFFSET_X = 198;
+const SVG_DO_EXIT_GAP = 18;
 
-const SVG_NODE_TEXT_CHAR_WIDTH = 8.6;
-const SVG_NODE_LINE_HEIGHT = 22;
-const SVG_NODE_HORIZONTAL_PADDING = 34;
-const SVG_NODE_VERTICAL_PADDING = 24;
+const SVG_NODE_TEXT_CHAR_WIDTH = 8.2;
+const SVG_NODE_LINE_HEIGHT = 20;
+const SVG_NODE_HORIZONTAL_PADDING = 28;
+const SVG_NODE_VERTICAL_PADDING = 14;
 
 const SVG_NODE_SIZE_PRESETS = {
-  if: { minWidth: 220, maxWidth: 400, minHeight: 108 },
-  while: { minWidth: 210, maxWidth: 380, minHeight: 74 },
-  for: { minWidth: 210, maxWidth: 380, minHeight: 74 },
-  do: { minWidth: 210, maxWidth: 380, minHeight: 74 },
-  comment: { minWidth: 190, maxWidth: 360, minHeight: 62 },
-  default: { minWidth: 180, maxWidth: 360, minHeight: 58 },
+  if: { minWidth: 204, maxWidth: 372, minHeight: 96 },
+  while: { minWidth: 194, maxWidth: 352, minHeight: 68 },
+  for: { minWidth: 194, maxWidth: 352, minHeight: 68 },
+  do: { minWidth: 194, maxWidth: 352, minHeight: 68 },
+  comment: { minWidth: 204, maxWidth: 480, minHeight: 40 },
+  default: { minWidth: 168, maxWidth: 336, minHeight: 52 },
+};
+
+let svgNodeMeasurementRoot = null;
+let hasScheduledFontAwareRender = false;
+
+const getSvgNodeVerticalInset = (type) => {
+  switch (type) {
+    case "if":
+      return 24;
+    case "while":
+    case "for":
+    case "do":
+      return 20;
+    case "input":
+    case "output":
+      return 16;
+    case "comment":
+      return 8;
+    default:
+      return 12;
+  }
 };
 
 const getSvgLabelInsets = (type, width, height) => {
@@ -3583,16 +4378,69 @@ const getSvgLabelInsets = (type, width, height) => {
   }
 };
 
+const getSvgNodeMeasurementRoot = () => {
+  if (svgNodeMeasurementRoot?.isConnected) {
+    return svgNodeMeasurementRoot;
+  }
+
+  const root = document.createElement("div");
+  root.setAttribute("aria-hidden", "true");
+  root.style.position = "absolute";
+  root.style.left = "-99999px";
+  root.style.top = "0";
+  root.style.visibility = "hidden";
+  root.style.pointerEvents = "none";
+  root.style.contain = "layout style size";
+
+  document.body.append(root);
+  svgNodeMeasurementRoot = root;
+  return root;
+};
+
+const measureSvgNodeLabelHeight = (type, width, markup) => {
+  const measurementRoot = getSvgNodeMeasurementRoot();
+  const wrapper = document.createElement("div");
+  wrapper.className = `svg-node-label svg-node-label-${type}`;
+  wrapper.style.width = `${Math.max(width, 24)}px`;
+  wrapper.style.height = "auto";
+
+  const inner = document.createElement("div");
+  inner.className = "svg-node-label-inner";
+  inner.innerHTML = markup;
+  wrapper.append(inner);
+  measurementRoot.append(wrapper);
+
+  const measuredHeight = Math.ceil(wrapper.getBoundingClientRect().height);
+  wrapper.remove();
+  return Math.max(measuredHeight, 24);
+};
+
+const scheduleFontAwareRender = () => {
+  if (hasScheduledFontAwareRender || !("fonts" in document) || typeof document.fonts.ready?.then !== "function") {
+    return;
+  }
+
+  hasScheduledFontAwareRender = true;
+
+  document.fonts.ready
+    .then(() => {
+      renderFlowchart();
+    })
+    .catch(() => {
+      // Ignore font loading failures.
+    });
+};
+
 const estimateWrappedLineCount = (text, charsPerLine) => {
   if (!text) {
     return 1;
   }
 
-  const paragraphs = text.split(/\n+/);
+  const paragraphs = text.split("\n");
   let lineCount = 0;
 
   paragraphs.forEach((paragraph) => {
-    const words = paragraph.trim().split(/\s+/).filter(Boolean);
+    const words = paragraph.split(/\s+/).filter(Boolean);
 
     if (words.length === 0) {
       lineCount += 1;
@@ -3646,18 +4494,24 @@ const getSvgNodeSize = (nodeOrType) => {
     typeof nodeOrType === "string"
       ? getNodeDefinition(type)?.label ?? ""
       : (getNodeDisplayText(nodeOrType) || getNodeDefinition(type)?.label || "");
-  const normalizedText = displayText.replace(/\s+/g, " ").trim();
+  const measurementText = displayText;
+  const normalizedText = measurementText.replace(/[ \t]+/g, " ").trim();
+  const estimatedLongestLineLength = Math.max(
+    ...measurementText.split("\n").map((line) => line.trim().length),
+    1
+  );
   const estimatedTextWidth = Math.max(
     preset.minWidth,
-    Math.ceil(normalizedText.length * SVG_NODE_TEXT_CHAR_WIDTH + SVG_NODE_HORIZONTAL_PADDING)
+    Math.ceil(estimatedLongestLineLength * SVG_NODE_TEXT_CHAR_WIDTH + SVG_NODE_HORIZONTAL_PADDING)
   );
   const width = Math.min(preset.maxWidth, estimatedTextWidth);
-  const charsPerLine = Math.max(
-    10,
-    Math.floor((width - SVG_NODE_HORIZONTAL_PADDING) / SVG_NODE_TEXT_CHAR_WIDTH)
-  );
-  const lineCount = estimateWrappedLineCount(normalizedText, charsPerLine);
-  const contentHeight = lineCount * SVG_NODE_LINE_HEIGHT + SVG_NODE_VERTICAL_PADDING;
+  const labelBox = getSvgLabelInsets(type, width, preset.minHeight);
+  const labelMarkup =
+    typeof nodeOrType === "string"
+      ? `<span class="node-label-content">${escapeHtml(displayText)}</span>`
+      : getNodeMarkup(nodeOrType);
+  const measuredContentHeight = measureSvgNodeLabelHeight(type, labelBox.width, labelMarkup);
+  const contentHeight = measuredContentHeight + getSvgNodeVerticalInset(type);
 
   return {
     width,
@@ -3667,6 +4521,11 @@ const getSvgNodeSize = (nodeOrType) => {
 
 const getAdaptiveConnectorHeight = (nodeOrType) => {
   const type = typeof nodeOrType === "string" ? nodeOrType : nodeOrType.type;
+
+  if (type === "comment") {
+    return SVG_CONNECTOR_HEIGHT;
+  }
+
   const preset = SVG_NODE_SIZE_PRESETS[type] ?? SVG_NODE_SIZE_PRESETS.default;
   const { height } = getSvgNodeSize(nodeOrType);
   const extraHeight = Math.max(0, height - preset.minHeight);
@@ -3764,79 +4623,111 @@ const renderSvgTextLabel = (text, x, y, anchor = "middle") => `
   <text class="svg-branch-label" x="${x}" y="${y}" text-anchor="${anchor}">${escapeHtml(text)}</text>
 `;
 
-const measureSequenceHalfSpan = (nodes, depth = 0) => {
+const measureSequenceHorizontalExtents = (nodes, depth = 0) => {
   if (!nodes.length) {
-    return 0;
+    return { left: 0, right: 0 };
   }
 
-  return nodes.reduce((maxSpan, childNode) => Math.max(maxSpan, measureNodeHalfSpan(childNode, depth)), 0);
+  return nodes.reduce((maxExtents, childNode) => {
+    const childExtents = measureNodeHorizontalExtents(childNode, depth);
+    return {
+      left: Math.max(maxExtents.left, childExtents.left),
+      right: Math.max(maxExtents.right, childExtents.right),
+    };
+  }, { left: 0, right: 0 });
 };
 
-const getBranchOffsetX = (node, depth = 0) => {
+const getIfBranchOffsets = (node, depth = 0) => {
   const baseOffset = depth === 0 ? SVG_BRANCH_OFFSET_X : SVG_NESTED_BRANCH_OFFSET_X;
 
   if (node.type !== "if") {
-    return baseOffset;
+    return {
+      leftOffset: baseOffset,
+      rightOffset: baseOffset,
+    };
   }
 
-  const falseSpan = measureSequenceHalfSpan(node.branches?.falseBranch ?? [], depth + 1);
-  const trueSpan = measureSequenceHalfSpan(node.branches?.trueBranch ?? [], depth + 1);
+  const falseExtents = measureSequenceHorizontalExtents(node.branches?.falseBranch ?? [], depth + 1);
+  const trueExtents = measureSequenceHorizontalExtents(node.branches?.trueBranch ?? [], depth + 1);
   const { width } = getSvgNodeSize(node);
+  const minOffset = Math.max(baseOffset, Math.ceil(width / 2) + 56);
 
-  return Math.max(
-    baseOffset,
-    Math.ceil(width / 2) + 56,
-    falseSpan + 64,
-    trueSpan + 64
-  );
+  return {
+    leftOffset: Math.max(minOffset, falseExtents.right + 64),
+    rightOffset: Math.max(minOffset, trueExtents.left + 64),
+  };
 };
 
 const getLoopBranchOffsetX = (node, depth = 0) => {
   const baseOffset = depth === 0 ? SVG_LOOP_BRANCH_OFFSET_X : SVG_LOOP_NESTED_BRANCH_OFFSET_X;
-  const bodySpan = measureSequenceHalfSpan(node.branches?.body ?? [], depth + 1);
+  const bodyExtents = measureSequenceHorizontalExtents(node.branches?.body ?? [], depth + 1);
   const { width } = getSvgNodeSize(node);
 
   return Math.max(
     baseOffset,
     Math.ceil(width / 2) + 52,
-    bodySpan + 64
+    bodyExtents.left + 64
   );
 };
 
-const measureNodeHalfSpan = (node, depth = 0) => {
+const measureNodeHorizontalExtents = (node, depth = 0) => {
   const { width } = getSvgNodeSize(node);
 
   if (node.type === "if") {
-    const branchOffset = getBranchOffsetX(node, depth);
-    const falseSpan = measureSequenceHalfSpan(node.branches?.falseBranch ?? [], depth + 1);
-    const trueSpan = measureSequenceHalfSpan(node.branches?.trueBranch ?? [], depth + 1);
+    const { leftOffset, rightOffset } = getIfBranchOffsets(node, depth);
+    const falseExtents = measureSequenceHorizontalExtents(node.branches?.falseBranch ?? [], depth + 1);
+    const trueExtents = measureSequenceHorizontalExtents(node.branches?.trueBranch ?? [], depth + 1);
 
-    return Math.max(
-      width / 2,
-      branchOffset + falseSpan,
-      branchOffset + trueSpan
-    );
+    return {
+      left: Math.max(
+        width / 2,
+        leftOffset + falseExtents.left,
+        Math.max(trueExtents.left - rightOffset, 0)
+      ),
+      right: Math.max(
+        width / 2,
+        rightOffset + trueExtents.right,
+        Math.max(falseExtents.right - leftOffset, 0)
+      ),
+    };
   }
 
   if (node.type === "while") {
     const branchOffset = getLoopBranchOffsetX(node, depth);
-    const bodySpan = measureSequenceHalfSpan(node.branches?.body ?? [], depth + 1);
+    const bodyExtents = measureSequenceHorizontalExtents(node.branches?.body ?? [], depth + 1);
 
-    return Math.max(width / 2, branchOffset + bodySpan);
+    return {
+      left: Math.max(width / 2, Math.max(bodyExtents.left - branchOffset, 0)),
+      right: Math.max(width / 2, branchOffset + bodyExtents.right),
+    };
   }
 
   if (node.type === "for") {
     const branchOffset = getLoopBranchOffsetX(node, depth);
-    const bodySpan = measureSequenceHalfSpan(node.branches?.body ?? [], depth + 1);
+    const bodyExtents = measureSequenceHorizontalExtents(node.branches?.body ?? [], depth + 1);
 
-    return Math.max(width / 2, branchOffset + bodySpan);
+    return {
+      left: Math.max(width / 2, Math.max(bodyExtents.left - branchOffset, 0)),
+      right: Math.max(width / 2, branchOffset + bodyExtents.right),
+    };
   }
 
   if (node.type === "do") {
-    return Math.max(width / 2, SVG_DO_LOOP_OFFSET_X + 32);
+    return {
+      left: width / 2,
+      right: Math.max(width / 2, SVG_DO_LOOP_OFFSET_X + 32),
+    };
   }
 
-  return width / 2;
+  return {
+    left: width / 2,
+    right: width / 2,
+  };
+};
+
+const measureNodeHalfSpan = (node, depth = 0) => {
+  const extents = measureNodeHorizontalExtents(node, depth);
+  return Math.max(extents.left, extents.right);
 };
 
 const renderSvgNodeBlockAt = (node, y, path, centerX) => {
@@ -4033,9 +4924,9 @@ const renderSvgDoNodeBlock = (node, y, path, centerX) => {
 const renderSvgIfNodeBlock = (node, y, path, centerX) => {
   const { width, height } = getSvgNodeSize(node);
   const nodeX = centerX - width / 2;
-  const branchOffsetX = getBranchOffsetX(node, path.length);
-  const falseBranchX = centerX - branchOffsetX;
-  const trueBranchX = centerX + branchOffsetX;
+  const { leftOffset, rightOffset } = getIfBranchOffsets(node, path.length);
+  const falseBranchX = centerX - leftOffset;
+  const trueBranchX = centerX + rightOffset;
   const sideY = y + height / 2;
   const leftEdgeX = nodeX;
   const rightEdgeX = nodeX + width;
@@ -4392,7 +5283,19 @@ const getCodegenOutputLine = (template, language, variables) => {
 
 const getCodegenCommentLine = (text, language) => {
   const prefix = language === "python" ? "#" : "//";
-  return `${prefix} ${String(text ?? "").trim()}`.trimEnd();
+  const rawText = String(text ?? "").trim();
+
+  if (!rawText) {
+    return prefix;
+  }
+
+  return rawText
+    .split("\n")
+    .map((line) => {
+      const trimmedLine = line.trim();
+      return trimmedLine ? `${prefix} ${trimmedLine}` : prefix;
+    })
+    .join("\n");
 };
 
 const getCodegenCallLine = (text, language) => {
@@ -4422,9 +5325,14 @@ const generateCodeLinesForNodes = (nodes, language, indentLevel, variables) => {
       case "output":
         lines.push(indentCodeLine(indentLevel, getCodegenOutputLine(node.value, language, variables)));
         break;
-      case "comment":
-        lines.push(indentCodeLine(indentLevel, getCodegenCommentLine(node.value, language)));
+      case "comment": {
+        const commentLines = getCodegenCommentLine(node.value, language).split("\n");
+        commentLines.forEach((line) => {
+          lines.push(indentCodeLine(indentLevel, line));
+        });
+        lines.push("");
         break;
+      }
       case "call":
         lines.push(indentCodeLine(indentLevel, getCodegenCallLine(node.value, language)));
         break;
@@ -4607,6 +5515,7 @@ const renderFlowchart = () => {
 
   renderCodePreview();
   refreshExecutionUi();
+  syncUndoButton();
 };
 
 const openInsertDialog = (insertIndex, sourceButton) => {
@@ -4616,6 +5525,7 @@ const openInsertDialog = (insertIndex, sourceButton) => {
 
   pendingInsertTarget = insertIndex;
   lastConnectorButton = sourceButton;
+  syncInsertPasteButton();
   hideInsertDialogNotice();
   insertDialogBackdrop.hidden = false;
   document.body.style.overflow = "hidden";
@@ -4635,6 +5545,19 @@ const closeInsertDialog = () => {
   if (lastConnectorButton && typeof lastConnectorButton.focus === "function") {
     lastConnectorButton.focus();
   }
+};
+
+const syncInsertPasteButton = () => {
+  if (!insertPasteButton) {
+    return;
+  }
+
+  const hasClipboardNodes = Boolean(flowClipboard?.nodes?.length);
+  insertPasteButton.disabled = !hasClipboardNodes;
+  insertPasteButton.setAttribute("aria-disabled", String(!hasClipboardNodes));
+  insertPasteButton.title = hasClipboardNodes
+    ? "Incolla i nodi copiati in questo punto"
+    : "Copia o taglia prima uno o più nodi";
 };
 
 const openPropertyDialog = (nodeId) => {
@@ -4661,15 +5584,14 @@ const openPropertyDialog = (nodeId) => {
   const isDeclare = node.type === "declare";
   const isAssign = node.type === "assign";
   const isFor = node.type === "for";
-  const isOutput = node.type === "output";
+  const isLongText = node.type === "output" || node.type === "comment";
 
   genericPropertyField.hidden = isDeclare || isFor;
-  genericPropertyField.classList.toggle("is-output", isOutput);
-  propertyInput.dataset.autosize = String(isOutput);
+  genericPropertyField.classList.toggle("is-output", isLongText);
+  propertyInput.dataset.autosize = String(isLongText);
   declareFields.hidden = !isDeclare;
   forFields.hidden = !isFor;
   mountAssignSuggestions();
-  syncPropertyInputSize();
 
   if (isAssign) {
     renderAssignSuggestions(propertyInput.value);
@@ -4713,6 +5635,8 @@ const openPropertyDialog = (nodeId) => {
   document.body.style.overflow = "hidden";
 
   requestAnimationFrame(() => {
+    syncPropertyInputSize();
+
     if (isDeclare) {
       declareNameInput.focus();
       declareNameInput.select();
@@ -4751,6 +5675,9 @@ const removeDraftNode = () => {
 
 const resetFlowchart = () => {
   cancelExecution();
+  if (flowNodes.length > 0) {
+    pushUndoSnapshot();
+  }
   clearRuntimeSnapshot();
   flowNodes.length = 0;
   nextNodeId = 1;
@@ -4763,11 +5690,101 @@ const resetFlowchart = () => {
   renderFlowchart();
 };
 
+const copySelectedNodes = () => {
+  if (isProgramRunning) {
+    return;
+  }
+
+  const selectionContext = getClipboardSelectionContext();
+
+  if (selectionContext.error) {
+    window.alert(selectionContext.error);
+    return;
+  }
+
+  flowClipboard = {
+    nodes: selectionContext.nodes.map(cloneNodeForClipboard),
+  };
+  syncInsertPasteButton();
+};
+
+const cutSelectedNodes = () => {
+  if (isProgramRunning) {
+    return;
+  }
+
+  const selectionContext = getClipboardSelectionContext();
+
+  if (selectionContext.error) {
+    window.alert(selectionContext.error);
+    return;
+  }
+
+  flowClipboard = {
+    nodes: selectionContext.nodes.map(cloneNodeForClipboard),
+  };
+  syncInsertPasteButton();
+  pushUndoSnapshot();
+
+  [...selectionContext.locations]
+    .sort((left, right) => right.index - left.index)
+    .forEach((location) => {
+      location.container.splice(location.index, 1);
+    });
+
+  clearRuntimeSnapshot();
+  selectedNodeIds = new Set();
+  saveFlowchartState();
+  renderFlowchart();
+};
+
+const pasteClipboardNodes = () => {
+  if (isProgramRunning || !flowClipboard?.nodes?.length) {
+    return;
+  }
+
+  const pasteTarget = pendingInsertTarget
+    ? {
+        path: pendingInsertTarget.path,
+        container: getContainerByPath(pendingInsertTarget.path),
+        index: pendingInsertTarget.index,
+      }
+    : getPasteTargetContext();
+
+  if (pasteTarget.error) {
+    window.alert(pasteTarget.error);
+    return;
+  }
+
+  const pastedNodes = flowClipboard.nodes.map(cloneNodeForClipboard);
+  const renamedDeclarations = resolveClipboardDeclarationConflicts(pastedNodes);
+  assignFreshNodeIds(pastedNodes);
+  pushUndoSnapshot();
+
+  pasteTarget.container.splice(pasteTarget.index, 0, ...pastedNodes);
+  clearRuntimeSnapshot();
+  selectedNodeIds = new Set(pastedNodes.map((node) => node.id));
+  saveFlowchartState();
+  renderFlowchart();
+
+  if (renamedDeclarations.length > 0) {
+    const renameSummary = renamedDeclarations
+      .map(({ from, to }) => `${from} -> ${to}`)
+      .join(", ");
+    window.alert(`Alcune variabili dichiarate erano già presenti nel diagramma e sono state rinominate automaticamente: ${renameSummary}.`);
+  }
+
+  if (!insertDialogBackdrop.hidden) {
+    closeInsertDialog();
+  }
+};
+
 const deleteSelectedNode = () => {
   if (isProgramRunning || selectedNodeIds.size === 0) {
     return;
   }
 
+  pushUndoSnapshot();
   const removableIds = new Set(selectedNodeIds);
   Array.from(removableIds).forEach((nodeId) => {
     removeNodeById(nodeId);
@@ -4841,6 +5858,7 @@ const finalizeNode = () => {
     node.value = propertyInput.value.trim();
   }
 
+  pushUndoSnapshot();
   node.isDraft = false;
   clearRuntimeSnapshot();
   saveFlowchartState();
@@ -4915,6 +5933,12 @@ insertNodeButtons.forEach((button) => {
 
 if (insertDialogClose) {
   insertDialogClose.addEventListener("click", closeInsertDialog);
+}
+
+if (insertPasteButton) {
+  insertPasteButton.addEventListener("click", () => {
+    pasteClipboardNodes();
+  });
 }
 
 if (insertDialogNoticeClose) {
@@ -5325,6 +6349,16 @@ if (propertyDialogBackdrop) {
     }
 
     if (event.key === "Enter") {
+      const isLongTextField =
+        event.target === propertyInput &&
+        propertyInput?.dataset.autosize === "true" &&
+        !event.ctrlKey &&
+        !event.metaKey;
+
+      if (isLongTextField) {
+        return;
+      }
+
       event.preventDefault();
       finalizeNode();
     }
@@ -5420,6 +6454,24 @@ if (saveDiagramButton) {
   });
 }
 
+if (undoButton) {
+  undoButton.addEventListener("click", () => {
+    undoLastChange();
+  });
+}
+
+if (redoButton) {
+  redoButton.addEventListener("click", () => {
+    redoLastChange();
+  });
+}
+
+if (focusModeButton) {
+  focusModeButton.addEventListener("click", () => {
+    setDiagramFocusMode(!isDiagramFocusMode);
+  });
+}
+
 if (runProgramButton) {
   runProgramButton.addEventListener("click", () => {
     startProgramExecution("run");
@@ -5453,6 +6505,23 @@ if (showNodeTypeToggle) {
   });
 }
 
+if (themeToggleButton) {
+  themeToggleButton.addEventListener("click", () => {
+    applyTheme(currentTheme === "dark" ? "light" : "dark");
+    saveThemePreference();
+  });
+}
+
+window.addEventListener("resize", () => {
+  syncResponsiveDiagramZoom();
+  syncMobileSidebarView();
+  scheduleLayoutAwareRender();
+});
+
+window.addEventListener("load", () => {
+  scheduleLayoutAwareRender();
+});
+
 document.addEventListener("keydown", (event) => {
   if (!propertyDialogBackdrop.hidden) {
     return;
@@ -5470,6 +6539,12 @@ document.addEventListener("keydown", (event) => {
 
     if (!insertDialogBackdrop.hidden) {
       closeInsertDialog();
+      return;
+    }
+
+    if (isDiagramFocusMode) {
+      event.preventDefault();
+      setDiagramFocusMode(false);
     }
 
     return;
@@ -5480,6 +6555,30 @@ document.addEventListener("keydown", (event) => {
   }
 
   const normalizedKey = typeof event.key === "string" ? event.key.toLowerCase() : "";
+
+  if (event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey && normalizedKey === "z") {
+    event.preventDefault();
+    undoLastChange();
+    return;
+  }
+
+  if (event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey && normalizedKey === "y") {
+    event.preventDefault();
+    redoLastChange();
+    return;
+  }
+
+  if (event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey && normalizedKey === "c") {
+    event.preventDefault();
+    copySelectedNodes();
+    return;
+  }
+
+  if (event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey && normalizedKey === "x") {
+    event.preventDefault();
+    cutSelectedNodes();
+    return;
+  }
 
   if (!event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey && normalizedKey === "e") {
     event.preventDefault();
@@ -5493,16 +6592,37 @@ document.addEventListener("keydown", (event) => {
     return;
   }
 
+  if (
+    !event.ctrlKey &&
+    !event.shiftKey &&
+    !event.altKey &&
+    !event.metaKey &&
+    normalizedKey === "f" &&
+    propertyDialogBackdrop.hidden &&
+    insertDialogBackdrop.hidden
+  ) {
+    event.preventDefault();
+    setDiagramFocusMode(!isDiagramFocusMode);
+    return;
+  }
+
   if ((event.key === "Delete" || event.key === "Backspace") && propertyDialogBackdrop.hidden && insertDialogBackdrop.hidden) {
     event.preventDefault();
     deleteSelectedNode();
   }
 });
 
+loadThemePreference();
 loadNodeLabelPreference();
 loadFlowchartState();
+loadHistoryState();
 loadCodeLanguagePreference();
 syncCodeLanguageTabs();
+syncFocusModeButton();
+syncMobileSidebarView();
+syncResponsiveDiagramZoom({ force: true });
 setActiveMainView(loadMainViewPreference());
 renderFlowchart();
+scheduleLayoutAwareRender();
+scheduleFontAwareRender();
 syncExecutionControls();

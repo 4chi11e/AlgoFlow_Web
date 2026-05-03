@@ -16,6 +16,7 @@
         <button type="button" class="ghost-button" id="new-diagram-button">Nuovo</button>
         <button type="button" class="ghost-button" id="load-diagram-button">Carica</button>
         <button type="button" class="ghost-button" id="save-diagram-button">Salva</button>
+        <button type="button" class="ghost-button" id="theme-toggle-button" title="Tema scuro">Tema scuro</button>
       </div>
       <div class="topbar-brand">
         <p class="eyebrow">Prototype</p>
@@ -39,10 +40,21 @@
               <span class="folder-tab-label">Codice</span>
             </button>
           </div>
-          <label class="topbar-toggle folder-toggle" for="show-node-type-toggle">
-            <input type="checkbox" id="show-node-type-toggle">
-            <span>Mostra nome nodo</span>
-          </label>
+          <div class="folder-tabs-actions">
+            <div class="history-actions" aria-label="Cronologia modifiche">
+              <button type="button" class="history-button" id="undo-button" title="Annulla (Ctrl+Z)" aria-label="Annulla" disabled>
+                <span class="history-button-icon" aria-hidden="true">↶</span>
+              </button>
+              <button type="button" class="history-button" id="redo-button" title="Ripristina (Ctrl+Y)" aria-label="Ripristina" disabled>
+                <span class="history-button-icon" aria-hidden="true">↷</span>
+              </button>
+            </div>
+            <button type="button" class="ghost-button focus-toggle-button" id="focus-mode-button" title="F">Focus</button>
+            <label class="topbar-toggle folder-toggle" for="show-node-type-toggle">
+              <input type="checkbox" id="show-node-type-toggle">
+              <span>Mostra nome nodo</span>
+            </label>
+          </div>
         </div>
 
         <div class="main-content">
@@ -221,6 +233,10 @@
       </div>
 
       <aside class="panel sidebar-panel" aria-label="Pannello laterale">
+        <div class="mobile-sidebar-tabs" role="tablist" aria-label="Vista pannello laterale">
+          <button type="button" class="mobile-sidebar-tab is-active" data-sidebar-target="variables" aria-selected="true">Variabili</button>
+          <button type="button" class="mobile-sidebar-tab" data-sidebar-target="terminal" aria-selected="false">Terminale</button>
+        </div>
         <div class="sidebar-content">
           <section class="sidebar-section variables-section" aria-labelledby="variables-title">
             <div class="section-heading">
