@@ -20,12 +20,19 @@ const runProgramButton = document.querySelector("#run-program-button");
 const stepProgramButton = document.querySelector("#step-program-button");
 const stopProgramButton = document.querySelector("#stop-program-button");
 const themeToggleButton = document.querySelector("#theme-toggle-button");
+const touchSelectionOverrideButton = document.querySelector("#touch-selection-override-button");
+const mobileTopbarMenuToggleButton = document.querySelector("#mobile-topbar-menu-toggle");
+const topbarStartControls = document.querySelector("#topbar-start-controls");
+const topbarEndControls = document.querySelector(".topbar-group-end");
 const showNodeTypeToggle = document.querySelector("#show-node-type-toggle");
 
 const diagramCanvas = document.querySelector("#diagram-canvas");
 const flowchartRoot = document.querySelector("#flowchart-root");
 const codePreviewContent = document.querySelector("#code-preview-content");
 const selectionBox = document.querySelector("#selection-box");
+const mobileSelectionControls = document.querySelector("#mobile-selection-controls");
+const mobileMultiSelectToggleButton = document.querySelector("#mobile-multi-select-toggle");
+const mobileDeleteSelectionButton = document.querySelector("#mobile-delete-selection-button");
 const variablesBody = document.querySelector("#variables-body");
 const terminalStatus = document.querySelector("#terminal-status");
 const consoleOutput = document.querySelector("#console-output");
@@ -78,6 +85,7 @@ const NODE_LABEL_PREFERENCE_KEY = "flowgorithm-web-show-node-type";
 const MAIN_VIEW_PREFERENCE_KEY = "algoflow-main-view";
 const CODE_LANGUAGE_PREFERENCE_KEY = "algoflow-code-language";
 const THEME_PREFERENCE_KEY = "algoflow-theme";
+const TOUCH_SELECTION_OVERRIDE_KEY = "algoflow-force-touch-selection-ui";
 const ALGOFLOW_FILE_FORMAT = "algoflow";
 const ALGOFLOW_FILE_VERSION = 1;
 const ALGOFLOW_FILE_EXTENSION = ".algoflow.json";
@@ -92,6 +100,7 @@ const ALGOFLOW_PICKER_HANDLE_KEY = "last-handle";
 const ALGOFLOW_PDF_PAYLOAD_BEGIN = "ALGOFLOW_PAYLOAD_BEGIN";
 const ALGOFLOW_PDF_PAYLOAD_END = "ALGOFLOW_PAYLOAD_END";
 const COMPACT_LAYOUT_BREAKPOINT = 1000;
+const MOBILE_TOPBAR_MENU_BREAKPOINT = 680;
 const NOT_YET_IMPLEMENTED_MESSAGE = "Questa funzione al momento non è utilizzabile perché non è ancora stata sviluppata.";
 
 const nodeDefinitions = {
@@ -223,9 +232,12 @@ let isSidebarSplitManual = false;
 let pendingSidebarAutoSyncFrame = null;
 let selectedCodeLanguage = "c";
 let currentTheme = "light";
+let isMobileTopbarMenuOpen = false;
 let isDiagramFocusMode = false;
 let mainViewBeforeFocusMode = null;
 let mobileSidebarView = "terminal";
+let isTouchSelectionUiForced = false;
+let isMobileMultiSelectMode = false;
 let pendingLayoutAwareRenderFrame = null;
 let currentDiagramZoomPreset = null;
 let touchPinchState = null;
@@ -242,6 +254,132 @@ const DIAGRAM_ZOOM_PRESETS = {
   desktop: 0.9,
   compact: 0.8,
   phone: 0.68,
+};
+
+const isCompactLayout = () => window.innerWidth <= COMPACT_LAYOUT_BREAKPOINT;
+const isMobileTopbarMenuLayout = () => window.innerWidth <= MOBILE_TOPBAR_MENU_BREAKPOINT;
+const hasFinePointerSupport = () =>
+  Boolean(window.matchMedia && window.matchMedia("(any-pointer: fine)").matches);
+
+const isPrimaryPointerCoarse = () =>
+  Boolean(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+
+const isTouchPrimaryLayout = () => {
+  if (isPrimaryPointerCoarse()) {
+    return true;
+  }
+
+  if (window.matchMedia && window.matchMedia("(any-pointer: coarse)").matches && !hasFinePointerSupport()) {
+    return true;
+  }
+
+  return Number(navigator.maxTouchPoints || 0) > 0 && !hasFinePointerSupport();
+};
+
+const shouldUseMobileSelectionUi = () => {
+  if (isTouchSelectionUiForced) {
+    return true;
+  }
+
+  // Show controls on touch-first devices even at high resolution,
+  // but avoid enabling them on desktop layouts that primarily use fine pointers.
+  if (isPrimaryPointerCoarse()) {
+    return true;
+  }
+
+  return isCompactLayout() && isTouchPrimaryLayout();
+};
+
+const getVisibleTopbarItems = (container) => {
+  if (!(container instanceof HTMLElement)) {
+    return [];
+  }
+
+  return Array.from(container.children).filter((child) => {
+    if (!(child instanceof HTMLElement)) {
+      return false;
+    }
+
+    if (child.hidden) {
+      return false;
+    }
+
+    const style = window.getComputedStyle(child);
+    return style.display !== "none" && style.visibility !== "hidden";
+  });
+};
+
+const hasWrappedTopbarItems = (container) => {
+  const items = getVisibleTopbarItems(container);
+
+  if (items.length < 2) {
+    return false;
+  }
+
+  const firstTop = items[0].offsetTop;
+  return items.some((item) => Math.abs(item.offsetTop - firstTop) > 2);
+};
+
+const areTopbarGroupsOverlapping = (startGroup, endGroup) => {
+  if (!(startGroup instanceof HTMLElement) || !(endGroup instanceof HTMLElement)) {
+    return false;
+  }
+
+  const startRect = startGroup.getBoundingClientRect();
+  const endRect = endGroup.getBoundingClientRect();
+  const horizontalOverlap = startRect.right > endRect.left + 2;
+  const verticalOverlap = startRect.bottom > endRect.top + 2 && endRect.bottom > startRect.top + 2;
+
+  return horizontalOverlap && verticalOverlap;
+};
+
+const syncTopbarAdaptiveLayout = () => {
+  if (!appShell) {
+    return;
+  }
+
+  appShell.classList.remove("is-topbar-start-overflow");
+
+  if (isMobileTopbarMenuLayout()) {
+    return;
+  }
+
+  const startWrapped = hasWrappedTopbarItems(topbarStartControls);
+  const endWrapped = hasWrappedTopbarItems(topbarEndControls);
+  const overlappingGroups = areTopbarGroupsOverlapping(topbarStartControls, topbarEndControls);
+
+  if (startWrapped || endWrapped || overlappingGroups) {
+    appShell.classList.add("is-topbar-start-overflow");
+  }
+};
+
+const closeMobileTopbarMenu = () => {
+  if (!isMobileTopbarMenuOpen) {
+    return;
+  }
+
+  isMobileTopbarMenuOpen = false;
+  syncMobileTopbarMenu();
+};
+
+const syncMobileTopbarMenu = () => {
+  const isCompact = isMobileTopbarMenuLayout();
+
+  if (!isCompact && isMobileTopbarMenuOpen) {
+    isMobileTopbarMenuOpen = false;
+  }
+
+  if (appShell) {
+    appShell.classList.toggle("is-mobile-topbar-menu-open", isCompact && isMobileTopbarMenuOpen);
+  }
+
+  if (mobileTopbarMenuToggleButton) {
+    mobileTopbarMenuToggleButton.hidden = !isCompact;
+    mobileTopbarMenuToggleButton.setAttribute("aria-expanded", String(isCompact && isMobileTopbarMenuOpen));
+    mobileTopbarMenuToggleButton.title = isMobileTopbarMenuOpen ? "Chiudi menu azioni" : "Apri menu azioni";
+  }
+
+  syncTopbarAdaptiveLayout();
 };
 
 const applyDiagramZoom = () => {
@@ -2997,6 +3135,8 @@ const setActiveMainView = (targetId) => {
     item.classList.toggle("is-active", isTarget);
     item.setAttribute("aria-selected", String(isTarget));
   });
+
+  syncMobileSelectionControls();
 };
 
 const loadMainViewPreference = () => {
@@ -3050,7 +3190,7 @@ const setDiagramFocusMode = (nextValue) => {
 };
 
 const syncMobileSidebarView = () => {
-  const isMobile = window.innerWidth <= COMPACT_LAYOUT_BREAKPOINT;
+  const isMobile = isCompactLayout();
 
   mobileSidebarTabs.forEach((tab) => {
     const isActive = tab.dataset.sidebarTarget === mobileSidebarView;
@@ -3070,6 +3210,69 @@ const syncMobileSidebarView = () => {
 
   variablesSection.classList.toggle("is-mobile-hidden", mobileSidebarView !== "variables");
   terminalSection.classList.toggle("is-mobile-hidden", mobileSidebarView !== "terminal");
+};
+
+const syncMobileSelectionControls = () => {
+  const isMobile = shouldUseMobileSelectionUi();
+  const isDiagramViewActive = getActiveMainViewId() === "diagram-view";
+
+  if (!isMobile && isMobileMultiSelectMode) {
+    isMobileMultiSelectMode = false;
+  }
+
+  if (mobileSelectionControls) {
+    mobileSelectionControls.hidden = !(isMobile && isDiagramViewActive);
+  }
+
+  if (mobileMultiSelectToggleButton) {
+    const isActive = isMobile && isMobileMultiSelectMode;
+    mobileMultiSelectToggleButton.classList.toggle("is-active", isActive);
+    mobileMultiSelectToggleButton.setAttribute("aria-pressed", String(isActive));
+    mobileMultiSelectToggleButton.title = isActive
+      ? "Tocca per disattivare la selezione multipla"
+      : "Tocca per attivare la selezione multipla";
+  }
+
+  if (mobileDeleteSelectionButton) {
+    const canDelete = isMobile && !isProgramRunning && selectedNodeIds.size > 0;
+    mobileDeleteSelectionButton.disabled = !canDelete;
+    mobileDeleteSelectionButton.title = canDelete
+      ? `Elimina ${selectedNodeIds.size === 1 ? "il blocco selezionato" : "i blocchi selezionati"}`
+      : "Seleziona almeno un blocco per eliminare";
+  }
+};
+
+const syncTouchSelectionOverrideButton = () => {
+  if (!touchSelectionOverrideButton) {
+    return;
+  }
+
+  touchSelectionOverrideButton.classList.toggle("is-active", isTouchSelectionUiForced);
+  touchSelectionOverrideButton.setAttribute("aria-pressed", String(isTouchSelectionUiForced));
+  touchSelectionOverrideButton.textContent = isTouchSelectionUiForced ? "Touch UI On" : "Touch UI";
+  touchSelectionOverrideButton.title = isTouchSelectionUiForced
+    ? "Disattiva forzatura controlli touch"
+    : "Forza i controlli touch anche su desktop";
+
+  syncTopbarAdaptiveLayout();
+};
+
+const loadTouchSelectionOverridePreference = () => {
+  try {
+    isTouchSelectionUiForced = window.localStorage.getItem(TOUCH_SELECTION_OVERRIDE_KEY) === "true";
+  } catch {
+    isTouchSelectionUiForced = false;
+  }
+
+  syncTouchSelectionOverrideButton();
+};
+
+const saveTouchSelectionOverridePreference = () => {
+  try {
+    window.localStorage.setItem(TOUCH_SELECTION_OVERRIDE_KEY, String(isTouchSelectionUiForced));
+  } catch {
+    // Ignore storage failures.
+  }
 };
 
 const scheduleLayoutAwareRender = () => {
@@ -4031,6 +4234,8 @@ const syncExecutionControls = () => {
   if (stopProgramButton) {
     stopProgramButton.disabled = !isProgramRunning;
   }
+
+  syncMobileSelectionControls();
 };
 
 const mapExpressionOutsideStringLiterals = (expression, transform) => {
@@ -6579,6 +6784,7 @@ const renderFlowchart = () => {
   renderCodePreview();
   refreshExecutionUi();
   syncUndoButton();
+  syncMobileSelectionControls();
 };
 
 const openInsertDialog = (insertIndex, sourceButton) => {
@@ -7118,6 +7324,19 @@ if (flowchartRoot) {
         window.clearTimeout(nodeClickTimer);
       }
 
+      if (shouldUseMobileSelectionUi() && isMobileMultiSelectMode) {
+        if (selectedNodeIds.has(nodeId)) {
+          selectedNodeIds.delete(nodeId);
+        } else {
+          selectedNodeIds.add(nodeId);
+        }
+
+        selectedNodeIds = new Set(selectedNodeIds);
+        renderFlowchart();
+        nodeClickTimer = null;
+        return;
+      }
+
       nodeClickTimer = window.setTimeout(() => {
         selectedNodeIds = new Set([nodeId]);
         renderFlowchart();
@@ -7150,6 +7369,23 @@ if (flowchartRoot) {
     renderFlowchart();
     lastConnectorButton = nodeElement;
     openPropertyDialog(nodeId);
+  });
+}
+
+if (mobileMultiSelectToggleButton) {
+  mobileMultiSelectToggleButton.addEventListener("click", () => {
+    if (!shouldUseMobileSelectionUi()) {
+      return;
+    }
+
+    isMobileMultiSelectMode = !isMobileMultiSelectMode;
+    syncMobileSelectionControls();
+  });
+}
+
+if (mobileDeleteSelectionButton) {
+  mobileDeleteSelectionButton.addEventListener("click", () => {
+    deleteSelectedNode();
   });
 }
 
@@ -7735,9 +7971,32 @@ if (themeToggleButton) {
   });
 }
 
+if (mobileTopbarMenuToggleButton) {
+  mobileTopbarMenuToggleButton.addEventListener("click", () => {
+    if (!isMobileTopbarMenuLayout()) {
+      return;
+    }
+
+    isMobileTopbarMenuOpen = !isMobileTopbarMenuOpen;
+    syncMobileTopbarMenu();
+  });
+}
+
+if (touchSelectionOverrideButton) {
+  touchSelectionOverrideButton.addEventListener("click", () => {
+    isTouchSelectionUiForced = !isTouchSelectionUiForced;
+    syncTouchSelectionOverrideButton();
+    saveTouchSelectionOverridePreference();
+    syncMobileSelectionControls();
+  });
+}
+
 window.addEventListener("resize", () => {
   syncResponsiveDiagramZoom();
   syncMobileSidebarView();
+  syncMobileTopbarMenu();
+  syncMobileSelectionControls();
+  syncTopbarAdaptiveLayout();
   scheduleLayoutAwareRender();
 });
 
@@ -7836,6 +8095,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 loadThemePreference();
+loadTouchSelectionOverridePreference();
 loadNodeLabelPreference();
 loadFlowchartState();
 loadHistoryState();
@@ -7843,9 +8103,11 @@ loadCodeLanguagePreference();
 syncCodeLanguageTabs();
 syncFocusModeButton();
 syncMobileSidebarView();
+syncMobileTopbarMenu();
 syncResponsiveDiagramZoom({ force: true });
 setActiveMainView(loadMainViewPreference());
 renderFlowchart();
 scheduleLayoutAwareRender();
 scheduleFontAwareRender();
 syncExecutionControls();
+syncTopbarAdaptiveLayout();
