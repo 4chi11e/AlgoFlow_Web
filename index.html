@@ -12,15 +12,29 @@
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <div class="topbar-group topbar-group-start">
+      <div class="topbar-group topbar-group-start" id="topbar-start-controls">
         <button type="button" class="ghost-button" id="new-diagram-button">Nuovo</button>
         <button type="button" class="ghost-button" id="load-diagram-button">Carica</button>
         <button type="button" class="ghost-button" id="save-diagram-button">Salva</button>
         <button type="button" class="ghost-button" id="theme-toggle-button" title="Tema scuro">Tema scuro</button>
+        <button type="button" class="ghost-button touch-selection-override-button" id="touch-selection-override-button" title="Forza controlli touch">Touch UI</button>
       </div>
       <div class="topbar-brand">
-        <p class="eyebrow">Prototype</p>
-        <h1>AlgoFlow</h1>
+        <div class="topbar-brand-text">
+          <p class="eyebrow">Prototype</p>
+          <h1>AlgoFlow</h1>
+        </div>
+        <button
+          type="button"
+          class="ghost-button mobile-topbar-menu-toggle"
+          id="mobile-topbar-menu-toggle"
+          aria-controls="topbar-start-controls"
+          aria-expanded="false"
+          aria-label="Apri menu azioni"
+          hidden
+        >
+          ☰
+        </button>
       </div>
       <div class="topbar-group topbar-group-end">
         <button type="button" class="ghost-button" id="step-program-button" title="P">Passo</button>
@@ -62,6 +76,24 @@
             <div class="diagram-canvas" id="diagram-canvas">
               <div class="flowchart-root" id="flowchart-root" aria-label="Diagramma iniziale"></div>
               <div class="selection-box" id="selection-box" hidden></div>
+              <div class="mobile-selection-controls" id="mobile-selection-controls" aria-label="Strumenti selezione mobile" hidden>
+                <button
+                  type="button"
+                  class="mobile-selection-button"
+                  id="mobile-multi-select-toggle"
+                  aria-pressed="false"
+                >
+                  Selezione multipla
+                </button>
+                <button
+                  type="button"
+                  class="mobile-selection-button mobile-selection-button-danger"
+                  id="mobile-delete-selection-button"
+                  disabled
+                >
+                  Elimina selezione
+                </button>
+              </div>
               <div class="canvas-grid" aria-hidden="true"></div>
             </div>
 
