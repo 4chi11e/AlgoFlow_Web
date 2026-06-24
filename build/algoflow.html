@@ -4446,6 +4446,7 @@ let currentCodePreviewLines = [];
 
 const RUNTIME_UNDECLARED = Symbol("runtime-undeclared");
 const MAX_RUNTIME_OPERATIONS = 10000;
+const RUN_MODE_UI_UPDATE_INTERVAL = 25;
 const SUPPORTED_ASSIGNMENT_OPERATORS = new Set(["=", "+=", "-=", "*=", "/=", "%="]);
 
 const MIN_DIAGRAM_ZOOM = 0.18;
@@ -5058,6 +5059,39 @@ const renameIdentifierInOutputTemplate = (text, fromName, toName) => {
   });
 };
 
+const migrateLegacyRandomRangeSyntax = (text) =>
+  String(text ?? "").replace(/\brandom\s*\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)/gi, (_, minValue, maxValue) => {
+    const min = Number(minValue);
+    const max = Number(maxValue);
+    const range = max - min + 1;
+
+    if (!Number.isFinite(range) || range <= 0) {
+      return `random(${minValue}, ${maxValue})`;
+    }
+
+    return min === 0
+      ? `random(${range})`
+      : `random(${range}) + ${min}`;
+  });
+
+const migrateLegacyRandomSyntaxInNodes = (nodes) => {
+  nodes.forEach((node) => {
+    if (typeof node.value === "string") {
+      node.value = migrateLegacyRandomRangeSyntax(node.value);
+    }
+
+    if (node.forConfig) {
+      node.forConfig.start = migrateLegacyRandomRangeSyntax(node.forConfig.start);
+      node.forConfig.end = migrateLegacyRandomRangeSyntax(node.forConfig.end);
+      node.forConfig.step = migrateLegacyRandomRangeSyntax(node.forConfig.step);
+    }
+
+    if (node.branches) {
+      Object.values(node.branches).forEach((branchNodes) => migrateLegacyRandomSyntaxInNodes(branchNodes));
+    }
+  });
+};
+
 const renameIdentifierAcrossNodes = (nodes, fromName, toName) => {
   traverseNodes(nodes, (node) => {
     if (node.type === "declare" && node.declareConfig?.names) {
@@ -5184,6 +5218,7 @@ const applyPersistedFlowNodes = (rawNodes, options = {}) => {
   }
 
   const validNodes = rawNodes.map(normalizeNode).filter(Boolean);
+  migrateLegacyRandomSyntaxInNodes(validNodes);
 
   flowNodes.length = 0;
   flowNodes.push(...validNodes);
@@ -5617,9 +5652,15 @@ const escapeFlowgorithmStringLiteral = (value) =>
     .replace(/"/g, '\\"')
     .replace(/\r?\n/g, "\\n");
 
+const normalizeExpressionForFlowgorithm = (expression) =>
+  transformRandomFunctionCalls(String(expression ?? ""), (args) => {
+    const normalizedArgs = args.map((arg) => normalizeExpressionForFlowgorithm(arg));
+    return `Random(${normalizedArgs.join(", ")})`;
+  });
+
 const formatTemplateAsFlowgorithmOutputExpression = (template) => {
   const parts = [];
-  const placeholderPattern = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
+  const placeholderPattern = /\{([^{}]+)\}/g;
   let lastIndex = 0;
   let match = null;
 
@@ -5630,7 +5671,7 @@ const formatTemplateAsFlowgorithmOutputExpression = (template) => {
       parts.push(`"${escapeFlowgorithmStringLiteral(literalText)}"`);
     }
 
-    parts.push(match[1]);
+    parts.push(normalizeExpressionForFlowgorithm(match[1].trim()));
     lastIndex = match.index + match[0].length;
   }
 
@@ -5650,10 +5691,16 @@ const convertAssignmentToFlowgorithm = (node) => {
     throw new Error(`Il nodo Assign ${node.id} non può essere esportato in Flowgorithm.`);
   }
 
+  const targetText = parsedAssignment.indexExpression
+    ? `${parsedAssignment.variableName}[${normalizeExpressionForFlowgorithm(parsedAssignment.indexExpression)}]`
+    : parsedAssignment.variableName;
+  const expression = normalizeExpressionForFlowgorithm(parsedAssignment.expression);
+
   if (parsedAssignment.operator === "=") {
     return {
       ...parsedAssignment,
-      variableName: parsedAssignment.targetText,
+      variableName: targetText,
+      expression,
     };
   }
 
@@ -5668,9 +5715,9 @@ const convertAssignmentToFlowgorithm = (node) => {
   const mappedOperator = operatorMap[parsedAssignment.operator];
 
   return {
-    variableName: parsedAssignment.targetText,
+    variableName: targetText,
     operator: "=",
-    expression: `${parsedAssignment.targetText} ${mappedOperator} (${parsedAssignment.expression})`,
+    expression: `${targetText} ${mappedOperator} (${expression})`,
   };
 };
 
@@ -5713,10 +5760,10 @@ const exportNodesToFlowgorithmXml = (nodes, indentLevel = 5) => {
         lines.push(`${indent}<comment text="${escapeXmlAttribute(node.value)}"/>`);
         break;
       case "call":
-        lines.push(`${indent}<call expression="${escapeXmlAttribute(node.value)}"/>`);
+        lines.push(`${indent}<call expression="${escapeXmlAttribute(normalizeExpressionForFlowgorithm(node.value))}"/>`);
         break;
       case "if": {
-        lines.push(`${indent}<if expression="${escapeXmlAttribute(node.value)}">`);
+        lines.push(`${indent}<if expression="${escapeXmlAttribute(normalizeExpressionForFlowgorithm(node.value))}">`);
         lines.push(`${indent}${CODEGEN_INDENT}<then>`);
         lines.push(...exportNodesToFlowgorithmXml(node.branches?.trueBranch ?? [], indentLevel + 2));
         lines.push(`${indent}${CODEGEN_INDENT}</then>`);
@@ -5727,7 +5774,7 @@ const exportNodesToFlowgorithmXml = (nodes, indentLevel = 5) => {
         break;
       }
       case "while":
-        lines.push(`${indent}<while expression="${escapeXmlAttribute(node.value)}">`);
+        lines.push(`${indent}<while expression="${escapeXmlAttribute(normalizeExpressionForFlowgorithm(node.value))}">`);
         lines.push(...exportNodesToFlowgorithmXml(node.branches?.body ?? [], indentLevel + 1));
         lines.push(`${indent}</while>`);
         break;
@@ -5735,14 +5782,14 @@ const exportNodesToFlowgorithmXml = (nodes, indentLevel = 5) => {
         const config = node.forConfig ?? {};
         const includeEndText = config.includeEnd === false ? "False" : "True";
         lines.push(
-          `${indent}<for variable="${escapeXmlAttribute(config.variable ?? "")}" start="${escapeXmlAttribute(config.start ?? "")}" end="${escapeXmlAttribute(config.end ?? "")}" step="${escapeXmlAttribute(config.step ?? "1")}" algoflow-inclusive="${includeEndText}">`
+          `${indent}<for variable="${escapeXmlAttribute(config.variable ?? "")}" start="${escapeXmlAttribute(normalizeExpressionForFlowgorithm(config.start ?? ""))}" end="${escapeXmlAttribute(normalizeExpressionForFlowgorithm(config.end ?? ""))}" step="${escapeXmlAttribute(normalizeExpressionForFlowgorithm(config.step ?? "1"))}" algoflow-inclusive="${includeEndText}">`
         );
         lines.push(...exportNodesToFlowgorithmXml(node.branches?.body ?? [], indentLevel + 1));
         lines.push(`${indent}</for>`);
         break;
       }
       case "do":
-        lines.push(`${indent}<do expression="${escapeXmlAttribute(node.value)}">`);
+        lines.push(`${indent}<do expression="${escapeXmlAttribute(normalizeExpressionForFlowgorithm(node.value))}">`);
         lines.push(...exportNodesToFlowgorithmXml(node.branches?.body ?? [], indentLevel + 1));
         lines.push(`${indent}</do>`);
         break;
@@ -5858,12 +5905,17 @@ const convertFlowgorithmOutputExpressionToTemplate = (expression) => {
       return literalValue;
     }
 
-    if (/^[A-Za-z][A-Za-z0-9_]*$/.test(token)) {
-      return `{${token}}`;
-    }
-
-    throw new Error(`Espressione Output Flowgorithm non supportata: ${expression}`);
+    return `{${normalizeImportedFlowgorithmExpression(token)}}`;
   }).join("");
+};
+
+const normalizeImportedFlowgorithmExpression = (expression) => {
+  const normalizedExpression = normalizeExpressionSyntax(expression);
+
+  return transformRandomFunctionCalls(normalizedExpression, (args) => {
+    const normalizedArgs = args.map((arg) => normalizeImportedFlowgorithmExpression(arg));
+    return `random(${normalizedArgs.join(", ")})`;
+  });
 };
 
 const inferImportedForStep = (forElement) => {
@@ -5980,7 +6032,7 @@ const importFlowgorithmSequence = (parentElement) =>
       case "assign":
         return {
           type: "assign",
-          value: `${element.getAttribute("variable") || ""} = ${element.getAttribute("expression") || ""}`.trim(),
+          value: `${element.getAttribute("variable") || ""} = ${normalizeImportedFlowgorithmExpression(element.getAttribute("expression") || "")}`.trim(),
         };
       case "input":
         return {
@@ -6009,12 +6061,12 @@ const importFlowgorithmSequence = (parentElement) =>
       case "call":
         return {
           type: "call",
-          value: element.getAttribute("expression") || "",
+          value: normalizeImportedFlowgorithmExpression(element.getAttribute("expression") || ""),
         };
       case "if":
         return {
           type: "if",
-          value: element.getAttribute("expression") || "",
+          value: normalizeImportedFlowgorithmExpression(element.getAttribute("expression") || ""),
           branches: {
             trueBranch: getDirectChildElement(element, "then") ? importFlowgorithmSequence(getDirectChildElement(element, "then")) : [],
             falseBranch: getDirectChildElement(element, "else") ? importFlowgorithmSequence(getDirectChildElement(element, "else")) : [],
@@ -6023,7 +6075,7 @@ const importFlowgorithmSequence = (parentElement) =>
       case "while":
         return {
           type: "while",
-          value: element.getAttribute("expression") || "",
+          value: normalizeImportedFlowgorithmExpression(element.getAttribute("expression") || ""),
           branches: {
             body: importFlowgorithmSequence(element),
           },
@@ -6034,8 +6086,8 @@ const importFlowgorithmSequence = (parentElement) =>
           value: "",
           forConfig: {
             variable: element.getAttribute("variable") || "",
-            start: element.getAttribute("start") || "",
-            end: element.getAttribute("end") || "",
+            start: normalizeImportedFlowgorithmExpression(element.getAttribute("start") || ""),
+            end: normalizeImportedFlowgorithmExpression(element.getAttribute("end") || ""),
             step: inferImportedForStep(element),
             includeEnd: inferImportedForIncludeEnd(element),
           },
@@ -6046,7 +6098,7 @@ const importFlowgorithmSequence = (parentElement) =>
       case "do":
         return {
           type: "do",
-          value: element.getAttribute("expression") || "",
+          value: normalizeImportedFlowgorithmExpression(element.getAttribute("expression") || ""),
           branches: {
             body: importFlowgorithmSequence(element),
           },
@@ -7851,6 +7903,7 @@ const reservedWords = new Set([
   "or",
   "not",
   "mod",
+  "random",
   "to",
   "step",
 ]);
@@ -7922,7 +7975,7 @@ const validateDeclareName = (rawName, currentNodeId) => {
       return `Il nome "${name}" deve iniziare con una lettera o underscore e contenere solo lettere, numeri o underscore.`;
     }
 
-    if (reservedLanguageNames.has(name) || reservedLanguageNames.has(name.toLowerCase())) {
+    if (reservedWords.has(name.toLowerCase()) || reservedLanguageNames.has(name) || reservedLanguageNames.has(name.toLowerCase())) {
       return `Il nome "${name}" è riservato nei linguaggi C, C++ o Python.`;
     }
 
@@ -8050,40 +8103,6 @@ const highlightOutputTemplateText = (text, declaredNames) => {
 };
 
 const outputPlaceholderPattern = /\{([^{}]+)\}/;
-
-const shouldTreatOutputAsExpression = (text, declaredNames = new Set()) => {
-  const rawText = String(text ?? "").trim();
-
-  if (!rawText) {
-    return false;
-  }
-
-  if (outputPlaceholderPattern.test(rawText)) {
-    return false;
-  }
-
-  if (/^["'](?:\\.|(?!\1).)*\1$/.test(rawText)) {
-    return true;
-  }
-
-  if (/^-?\d+(?:\.\d+)?$/.test(rawText)) {
-    return true;
-  }
-
-  if (/^(true|false)$/i.test(rawText)) {
-    return true;
-  }
-
-  if (declaredNames.has(rawText)) {
-    return true;
-  }
-
-  if (/^[A-Za-z_][A-Za-z0-9_]*\s*\[.*\]$/.test(rawText)) {
-    return true;
-  }
-
-  return /[()[\]+\-*/%<>=!&|]/.test(rawText);
-};
 
 const parseAssignmentStatement = (text) => {
   const match = String(text ?? "").match(
@@ -8491,18 +8510,188 @@ const normalizeExpressionSyntax = (expression) =>
     chunk
       .replace(/\btrue\b/gi, "true")
       .replace(/\bfalse\b/gi, "false")
+      .replace(/\brandom\s*\(/gi, "random(")
       .replace(/\bmod\b/gi, "%")
       .replace(/\band\b/gi, "&&")
       .replace(/\bor\b/gi, "||")
       .replace(/\bnot\b/gi, "!")
   );
 
+const splitTopLevelArguments = (text) => {
+  const args = [];
+  const source = String(text ?? "");
+  let start = 0;
+  let depth = 0;
+  let activeQuote = null;
+
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+
+    if (activeQuote) {
+      if (character === "\\") {
+        index += 1;
+      } else if (character === activeQuote) {
+        activeQuote = null;
+      }
+      continue;
+    }
+
+    if (character === '"' || character === "'") {
+      activeQuote = character;
+      continue;
+    }
+
+    if (character === "(" || character === "[" || character === "{") {
+      depth += 1;
+      continue;
+    }
+
+    if (character === ")" || character === "]" || character === "}") {
+      depth = Math.max(0, depth - 1);
+      continue;
+    }
+
+    if (character === "," && depth === 0) {
+      args.push(source.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+
+  args.push(source.slice(start).trim());
+  return args;
+};
+
+const getRandomInteger = (...args) => {
+  if (args.length !== 1) {
+    throw new Error("random accetta solo random(range). Usa random(range) + min per spostare l'intervallo.");
+  }
+
+  const rangeValue = Number(args[0]);
+
+  if (!Number.isFinite(rangeValue)) {
+    throw new Error("random richiede un range numerico.");
+  }
+
+  const range = Math.floor(rangeValue);
+
+  if (range <= 0) {
+    throw new Error("random(range) richiede un range maggiore di 0.");
+  }
+
+  return Math.floor(Math.random() * range);
+};
+
+const transformRandomFunctionCalls = (expression, transform) => {
+  const source = String(expression ?? "");
+  let result = "";
+  let index = 0;
+  let activeQuote = null;
+
+  while (index < source.length) {
+    const character = source[index];
+
+    if (activeQuote) {
+      result += character;
+      if (character === "\\") {
+        if (index + 1 < source.length) {
+          result += source[index + 1];
+          index += 2;
+          continue;
+        }
+      } else if (character === activeQuote) {
+        activeQuote = null;
+      }
+      index += 1;
+      continue;
+    }
+
+    if (character === '"' || character === "'") {
+      activeQuote = character;
+      result += character;
+      index += 1;
+      continue;
+    }
+
+    if (/^[A-Za-z_]$/.test(character)) {
+      const identifierStart = index;
+      index += 1;
+      while (index < source.length && /^[A-Za-z0-9_]$/.test(source[index])) {
+        index += 1;
+      }
+
+      const identifier = source.slice(identifierStart, index);
+
+      if (identifier.toLowerCase() !== "random") {
+        result += identifier;
+        continue;
+      }
+
+      let cursor = index;
+      while (cursor < source.length && /\s/.test(source[cursor])) {
+        cursor += 1;
+      }
+
+      if (source[cursor] !== "(") {
+        result += identifier;
+        continue;
+      }
+
+      let depth = 1;
+      let innerIndex = cursor + 1;
+      let innerQuote = null;
+
+      for (; innerIndex < source.length; innerIndex += 1) {
+        const innerCharacter = source[innerIndex];
+
+        if (innerQuote) {
+          if (innerCharacter === "\\") {
+            innerIndex += 1;
+          } else if (innerCharacter === innerQuote) {
+            innerQuote = null;
+          }
+          continue;
+        }
+
+        if (innerCharacter === '"' || innerCharacter === "'") {
+          innerQuote = innerCharacter;
+          continue;
+        }
+
+        if (innerCharacter === "(") {
+          depth += 1;
+        } else if (innerCharacter === ")") {
+          depth -= 1;
+          if (depth === 0) {
+            break;
+          }
+        }
+      }
+
+      if (depth !== 0) {
+        result += identifier;
+        index = identifierStart + identifier.length;
+        continue;
+      }
+
+      const args = splitTopLevelArguments(source.slice(cursor + 1, innerIndex));
+      result += transform(args);
+      index = innerIndex + 1;
+      continue;
+    }
+
+    result += character;
+    index += 1;
+  }
+
+  return result;
+};
+
 const getRuntimeScope = () => {
   if (!runtimeState) {
     return {};
   }
 
-  return Object.fromEntries(
+  const scope = Object.fromEntries(
     Array.from(runtimeState.variableValues.entries()).map(([name, value]) => [
       name,
       value === RUNTIME_UNDECLARED
@@ -8522,6 +8711,9 @@ const getRuntimeScope = () => {
           : value,
     ])
   );
+
+  scope.random = getRandomInteger;
+  return scope;
 };
 
 const evaluateRuntimeExpression = (expression) => {
@@ -8532,7 +8724,7 @@ const evaluateRuntimeExpression = (expression) => {
   }
 
   const identifierPattern = /[A-Za-z_][A-Za-z0-9_]*/g;
-  const runtimeKeywords = new Set(["true", "false"]);
+  const runtimeKeywords = new Set(["true", "false", "random"]);
   const referencedVariables = new Set();
   let match = null;
 
@@ -8806,28 +8998,9 @@ const applyRuntimeInputValue = (targetReference, rawValue) => {
 
 const resolveRuntimeOutputValue = (text) => {
   const rawText = String(text ?? "");
-  const hasOuterWhitespace = rawText !== rawText.trim();
-
-  if (hasOuterWhitespace) {
-    if (outputPlaceholderPattern.test(rawText)) {
-      return resolveOutputTemplate(rawText);
-    }
-
-    return rawText;
-  }
-
-  const rawReference = parseVariableReference(rawText);
-
-  if (rawReference && runtimeState?.variableMeta.has(rawReference.variableName)) {
-    return formatRuntimeValue(getRuntimeReferenceValueForRead(rawReference));
-  }
 
   if (outputPlaceholderPattern.test(rawText)) {
     return resolveOutputTemplate(rawText);
-  }
-
-  if (shouldTreatOutputAsExpression(rawText, runtimeState?.variableMeta ?? new Set())) {
-    return formatRuntimeValue(evaluateRuntimeExpression(rawText));
   }
 
   return rawText;
@@ -9015,11 +9188,15 @@ const pauseBeforeNodeExecution = async (node) => {
     tone: "success",
     detail: executionMode === "step" ? "Passo pronto" : "Esecuzione in corso",
   });
-  renderFlowchart();
-  refreshExecutionUi();
 
   if (executionMode === "step") {
+    renderFlowchart();
+    refreshExecutionUi();
     await waitForNextStep();
+  } else if (runtimeState.operationCount % RUN_MODE_UI_UPDATE_INTERVAL === 0) {
+    renderFlowchart();
+    refreshExecutionUi();
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
   }
 
   if (runtimeState.cancelled) {
@@ -9327,9 +9504,7 @@ const getNodeMarkup = (node) => {
   }
 
   if (node.type === "output" && node.value) {
-    const outputMarkup = shouldTreatOutputAsExpression(node.value, declaredNames)
-      ? highlightUndeclaredVariablesInText(node.value, declaredNames)
-      : highlightOutputTemplateText(node.value, declaredNames);
+    const outputMarkup = highlightOutputTemplateText(node.value, declaredNames);
     return wrapNodeLabelContent(`${inlinePrefixMarkup}${outputMarkup}`);
   }
 
@@ -10315,8 +10490,27 @@ const normalizeExpressionForLanguage = (expression, language) => {
     return "";
   }
 
+  const transformRandomCallsForLanguage = (source) =>
+    transformRandomFunctionCalls(source, (args) => {
+      const normalizedArgs = args.map((arg) => normalizeExpressionForLanguage(arg, language) || arg);
+
+      if (language === "python") {
+        if (normalizedArgs.length === 1) {
+          return `_algoflow_random_range(${normalizedArgs[0]})`;
+        }
+      }
+
+      if (language === "c" || language === "cpp") {
+        if (normalizedArgs.length === 1) {
+          return `algoflow_random_range(${normalizedArgs[0]})`;
+        }
+      }
+
+      return `random(${normalizedArgs.join(", ")})`;
+    });
+
   if (language === "python") {
-    return mapExpressionOutsideStringLiterals(rawExpression, (chunk) =>
+    const normalizedExpression = mapExpressionOutsideStringLiterals(rawExpression, (chunk) =>
       chunk
         .replace(/\btrue\b/gi, "True")
         .replace(/\bfalse\b/gi, "False")
@@ -10328,9 +10522,29 @@ const normalizeExpressionForLanguage = (expression, language) => {
         .replace(/\bor\b/gi, "or")
         .replace(/!\s*(?!=)/g, "not ")
     );
+
+    return transformRandomCallsForLanguage(normalizedExpression);
   }
 
-  return normalizeExpressionSyntax(rawExpression);
+  return transformRandomCallsForLanguage(normalizeExpressionSyntax(rawExpression));
+};
+
+const getCodegenAssignmentLine = (text, language) => {
+  const assignment = parseAssignmentStatement(text);
+
+  if (!assignment) {
+    return String(text ?? "").trim() + (language === "python" ? "" : ";");
+  }
+
+  const normalizedIndex = assignment.indexExpression
+    ? normalizeExpressionForLanguage(assignment.indexExpression, language) || assignment.indexExpression
+    : "";
+  const normalizedExpression = normalizeExpressionForLanguage(assignment.expression, language) || assignment.expression;
+  const target = normalizedIndex
+    ? `${assignment.variableName}[${normalizedIndex}]`
+    : assignment.variableName;
+
+  return `${target} ${assignment.operator} ${normalizedExpression}` + (language === "python" ? "" : ";");
 };
 
 const inferForStepDirection = (stepExpression) => {
@@ -10595,52 +10809,16 @@ const getCOutputPlaceholder = (expression, variables) => {
     return { format: "%s", argument: `((${normalizedExpression}) ? "true" : "false")` };
   }
 
+  if (/\balgoflow_random_range\s*\(/.test(normalizedExpression)) {
+    return { format: "%d", argument: normalizedExpression };
+  }
+
   return { format: "%g", argument: normalizedExpression };
 };
 
 const getCodegenOutputLine = (template, language, variables, appendNewline = true) => {
   const rawTemplate = String(template ?? "");
   const placeholderPattern = /\{([^{}]+)\}/g;
-  const hasOuterWhitespace = rawTemplate !== rawTemplate.trim();
-  const containsPlaceholder = outputPlaceholderPattern.test(rawTemplate);
-
-  if (!hasOuterWhitespace && !containsPlaceholder && shouldTreatOutputAsExpression(rawTemplate, variables)) {
-    const expression = normalizeExpressionForLanguage(rawTemplate, language) || JSON.stringify(rawTemplate);
-
-    if (language === "python") {
-      return appendNewline ? `print(${expression})` : `print(${expression}, end="")`;
-    }
-
-    if (language === "cpp") {
-      return appendNewline ? `cout << ${expression} << endl;` : `cout << ${expression};`;
-    }
-
-    const trimmedExpression = rawTemplate.trim();
-    const expressionVariableMeta = variables.get(trimmedExpression) ?? null;
-    const isQuotedStringLiteral = /^".*"$/.test(trimmedExpression);
-    const isQuotedCharLiteral = /^'.'$/.test(trimmedExpression);
-    const isIndexedStringAccess = /^[A-Za-z_][A-Za-z0-9_]*\s*\[.*\]$/.test(trimmedExpression);
-    const looksBoolean = /^(true|false|\(|!|not\b|.*(?:==|!=|<=|>=|<|>|&&|\|\|).*)$/i.test(trimmedExpression);
-
-    const newlineSuffix = appendNewline ? "\\n" : "";
-    let formatLiteral = `"%g${newlineSuffix}"`;
-    let argument = expression;
-
-    if (looksBoolean) {
-      formatLiteral = `"%s${newlineSuffix}"`;
-      argument = `((${expression}) ? "true" : "false")`;
-    } else if (isIndexedStringAccess || isQuotedCharLiteral) {
-      formatLiteral = `"%c${newlineSuffix}"`;
-    } else if (isQuotedStringLiteral || expressionVariableMeta?.dataType === "String") {
-      formatLiteral = `"%s${newlineSuffix}"`;
-    } else if (expressionVariableMeta?.dataType === "Integer") {
-      formatLiteral = `"%d${newlineSuffix}"`;
-    } else if (expressionVariableMeta?.dataType === "Real") {
-      formatLiteral = `"%g${newlineSuffix}"`;
-    }
-
-    return `printf(${formatLiteral}, ${argument});`;
-  }
 
   if (language === "python") {
     return appendNewline
@@ -10736,7 +10914,7 @@ const generateCodeLinesForNodes = (nodes, language, indentLevel, variables) => {
         break;
       }
       case "assign":
-        pushCodeLine(lines, indentCodeLine(indentLevel, String(node.value ?? "").trim() + (language === "python" ? "" : ";")), node.id);
+        pushCodeLine(lines, indentCodeLine(indentLevel, getCodegenAssignmentLine(node.value, language)), node.id);
         break;
       case "input":
         pushCodeLine(lines, indentCodeLine(indentLevel, getCodegenInputLine(String(node.value ?? "").trim(), language, variables)), node.id);
@@ -10863,12 +11041,24 @@ const generateCodeLinesForNodes = (nodes, language, indentLevel, variables) => {
 const buildProgramCodeDocument = (language) => {
   const variables = collectCodegenVariableMeta();
   const bodyLines = generateCodeLinesForNodes(flowNodes, language, language === "python" ? 0 : 1, variables);
+  const usesRandom = bodyLines.some((line) => /_algoflow_random_|algoflow_random_/.test(line.text));
 
   if (language === "python") {
     const lines = bodyLines.length > 0 ? bodyLines : [{ text: "# Diagramma vuoto", nodeId: null }];
+    const randomHelperLines = usesRandom
+      ? [
+          { text: "import random as _algoflow_random", nodeId: null },
+          { text: "", nodeId: null },
+          { text: "def _algoflow_random_range(range_value):", nodeId: null },
+          { text: "    return _algoflow_random.randrange(int(range_value))", nodeId: null },
+          { text: "", nodeId: null },
+        ]
+      : [];
+    const codeLines = [...randomHelperLines, ...lines];
+
     return {
-      code: lines.map((line) => line.text).join("\n"),
-      lines,
+      code: codeLines.map((line) => line.text).join("\n"),
+      lines: codeLines,
     };
   }
 
@@ -10876,16 +11066,47 @@ const buildProgramCodeDocument = (language) => {
     ? [
         { text: "#include <iostream>", nodeId: null },
         { text: "#include <string>", nodeId: null },
+        ...(usesRandom
+          ? [
+              { text: "#include <cstdlib>", nodeId: null },
+              { text: "#include <ctime>", nodeId: null },
+            ]
+          : []),
         { text: "", nodeId: null },
         { text: "using namespace std;", nodeId: null },
         { text: "", nodeId: null },
       ]
     : [
         { text: "#include <stdio.h>", nodeId: null },
+        ...(usesRandom
+          ? [
+              { text: "#include <stdlib.h>", nodeId: null },
+              { text: "#include <time.h>", nodeId: null },
+            ]
+          : []),
         { text: "", nodeId: null },
       ];
 
+  const randomHelperLines = usesRandom
+    ? language === "cpp"
+      ? [
+          { text: "int algoflow_random_range(int rangeValue) {", nodeId: null },
+          { text: "    return std::rand() % rangeValue;", nodeId: null },
+          { text: "}", nodeId: null },
+          { text: "", nodeId: null },
+        ]
+      : [
+          { text: "int algoflow_random_range(int rangeValue) {", nodeId: null },
+          { text: "    return rand() % rangeValue;", nodeId: null },
+          { text: "}", nodeId: null },
+          { text: "", nodeId: null },
+        ]
+    : [];
+
   const mainHeader = language === "cpp" ? "int main() {" : "int main(void) {";
+  const setupLines = usesRandom
+    ? [{ text: indentCodeLine(1, language === "cpp" ? "std::srand((unsigned)std::time(nullptr));" : "srand((unsigned)time(NULL));"), nodeId: null }]
+    : [];
   const footerLines = [
     { text: indentCodeLine(1, "return 0;"), nodeId: null },
     { text: "}", nodeId: null },
@@ -10893,7 +11114,9 @@ const buildProgramCodeDocument = (language) => {
   const effectiveBody = bodyLines.length > 0 ? bodyLines : [{ text: indentCodeLine(1, "// Diagramma vuoto"), nodeId: null }];
   const lines = [
     ...includes,
+    ...randomHelperLines,
     { text: mainHeader, nodeId: null },
+    ...setupLines,
     ...effectiveBody,
     ...footerLines,
   ];
