@@ -5688,6 +5688,17 @@ const getLoopBranchOffsetX = (node, depth = 0) => {
   );
 };
 
+const getDoLoopBranchOffsetX = (node, depth = 0) => {
+  const bodyExtents = measureSequenceHorizontalExtents(node.branches?.body ?? [], depth + 1);
+  const { width } = getSvgNodeSize(node);
+
+  return Math.max(
+    SVG_DO_LOOP_OFFSET_X,
+    Math.ceil(width / 2) + 52,
+    bodyExtents.left + 64
+  );
+};
+
 const measureNodeHorizontalExtents = (node, depth = 0) => {
   const { width } = getSvgNodeSize(node);
 
@@ -5731,9 +5742,12 @@ const measureNodeHorizontalExtents = (node, depth = 0) => {
   }
 
   if (node.type === "do") {
+    const branchOffset = getDoLoopBranchOffsetX(node, depth);
+    const bodyExtents = measureSequenceHorizontalExtents(node.branches?.body ?? [], depth + 1);
+
     return {
-      left: width / 2,
-      right: Math.max(width / 2, SVG_DO_LOOP_OFFSET_X + 32),
+      left: Math.max(width / 2, Math.max(bodyExtents.left - branchOffset, 0)),
+      right: Math.max(width / 2, branchOffset + bodyExtents.right, branchOffset + 32),
     };
   }
 
@@ -5878,7 +5892,7 @@ const renderSvgDoNodeBlock = (node, y, path, centerX) => {
   const circleY = y + SVG_MERGE_RADIUS;
   const circleRightX = centerX + SVG_MERGE_RADIUS;
   const circleBottomY = circleY + SVG_MERGE_RADIUS;
-  const bodyX = centerX + SVG_DO_LOOP_OFFSET_X;
+  const bodyX = centerX + getDoLoopBranchOffsetX(node, path.length);
   const bodyEntryHeight = getAdaptiveBranchEntryHeight(node, SVG_DO_BODY_ENTRY_HEIGHT);
   const bodyEntryY = circleY + bodyEntryHeight;
   const bodyBranch = renderSvgIfBranchNodes(bodyNodes, bodyX, bodyEntryY, bodyPath);
