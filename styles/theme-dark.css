@@ -1,12 +1,10 @@
 :root[data-theme="dark"] .diagram-panel {
-  background: linear-gradient(180deg, rgba(24, 30, 39, 0.98), rgba(20, 26, 34, 0.94));
+  background: rgba(17, 22, 29, 0.96);
 }
 
 :root[data-theme="dark"] .diagram-canvas {
   border-color: rgba(255, 255, 255, 0.08);
-  background:
-    radial-gradient(circle at top center, rgba(122, 201, 200, 0.08), transparent 26%),
-    linear-gradient(180deg, rgba(14, 19, 26, 0.98), rgba(10, 14, 20, 0.96));
+  background: rgba(17, 22, 29, 0.96);
 }
 
 :root[data-theme="dark"] .canvas-grid {
@@ -14,7 +12,7 @@
 }
 
 :root[data-theme="dark"] .folder-tabs {
-  background: linear-gradient(180deg, rgba(36, 44, 56, 0.98), rgba(28, 35, 46, 0.95));
+  background: transparent;
 }
 
 :root[data-theme="dark"] .history-button {
@@ -51,13 +49,13 @@
 }
 
 :root[data-theme="dark"] .folder-tab.is-active {
-  background: linear-gradient(180deg, rgba(54, 64, 79, 1), rgba(39, 47, 60, 0.98));
+  background: rgba(17, 22, 29, 0.96);
   color: var(--text);
   border-color: rgba(255, 255, 255, 0.08);
 }
 
 :root[data-theme="dark"] .folder-tab.is-active::after {
-  background: rgba(39, 47, 60, 1);
+  background: rgba(17, 22, 29, 0.96);
 }
 
 :root[data-theme="dark"] .main-content,
@@ -412,4 +410,3 @@
   border-color: rgba(134, 187, 255, 0.5);
   box-shadow: 0 12px 24px rgba(57, 104, 173, 0.24);
 }
-

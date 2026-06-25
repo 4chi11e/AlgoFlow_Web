@@ -141,6 +141,10 @@ input {
   display: block;
 }
 
+.brand-mobile {
+  display: none;
+}
+
 .mobile-topbar-menu-toggle {
   display: none;
 }
@@ -169,7 +173,7 @@ h3 {
 }
 
 h1 {
-  font-size: clamp(1.8rem, 2vw, 2.5rem);
+  font-size: clamp(2rem, 2.35vw, 2.8rem);
 }
 
 .topbar-actions,
@@ -302,14 +306,9 @@ button:disabled {
   background: rgba(182, 92, 52, 0.98);
 }
 
-:root[data-theme="dark"] .folder-tabs::after {
-  border-bottom-color: rgba(255, 255, 255, 0.08);
-}
-
 :root[data-theme="dark"] .table-row {
   border-top-color: rgba(255, 255, 255, 0.08);
 }
-
 
 </style>
   <style data-inline-source="styles/workspace.css">
@@ -338,6 +337,7 @@ button:disabled {
 
 .diagram-panel {
   overflow: hidden;
+  background: rgba(255, 250, 242, 1);
 }
 
 .workspace-resizer {
@@ -382,20 +382,24 @@ button:disabled {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  border-radius: 20px;
-  border: 1px solid rgba(74, 58, 43, 0.22);
-  background: linear-gradient(180deg, rgba(255, 250, 242, 1), rgba(237, 226, 211, 0.96));
+  border-radius: 0;
+  border: 0;
+  background: rgba(255, 250, 242, 1);
   min-height: 0;
 }
 
 .mobile-selection-controls {
   position: absolute;
   right: 12px;
-  bottom: 12px;
+  top: 12px;
   z-index: 8;
   display: none;
   flex-direction: column;
   gap: 8px;
+}
+
+.mobile-selection-controls[hidden] {
+  display: none;
 }
 
 .mobile-selection-button {
@@ -452,10 +456,15 @@ button:disabled {
 
 .main-content {
   flex: 1;
-  padding: 0 14px 14px;
+  margin: 0;
+  padding: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  border-top: 0;
+  border-radius: 0;
+  overflow: hidden;
+  background: rgba(255, 250, 242, 1);
 }
 
 .main-view {
@@ -474,15 +483,19 @@ button:disabled {
   align-items: flex-end;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 14px 0;
+  padding: 10px 14px 0 0;
   position: relative;
+  margin-bottom: -1px;
+  z-index: 2;
 }
 
 .folder-tab-list {
   display: flex;
   align-items: flex-end;
-  gap: 4px;
+  gap: 0;
   min-width: 0;
+  margin-left: -1px;
+  margin-top: 0;
 }
 
 .folder-tabs-actions {
@@ -491,6 +504,7 @@ button:disabled {
   justify-content: flex-end;
   gap: 10px;
   flex-wrap: wrap;
+  padding-top: 0;
 }
 
 .history-actions {
@@ -547,19 +561,11 @@ button:disabled {
   outline: none;
 }
 
-.folder-tabs::after {
-  content: "";
-  position: absolute;
-  left: 14px;
-  right: 14px;
-  bottom: 0;
-  border-bottom: 1px solid rgba(74, 58, 43, 0.22);
-}
-
 .folder-tab {
   position: relative;
   z-index: 1;
-  border: 1px solid rgba(74, 58, 43, 0.18);
+  top: 0;
+  border: 1px solid rgba(74, 58, 43, 0.22);
   border-bottom: 0;
   background: linear-gradient(180deg, rgba(239, 225, 207, 0.98), rgba(222, 204, 180, 0.98));
   color: var(--muted);
@@ -568,25 +574,14 @@ button:disabled {
   min-width: 138px;
   border-radius: 16px 16px 0 0;
   cursor: pointer;
+  display: flex;
+  align-items: center;
   transition: transform 160ms ease, background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
-}
-
-.folder-tab::before {
-  content: "";
-  position: absolute;
-  top: -10px;
-  left: 18px;
-  width: 44px;
-  height: 14px;
-  border-radius: 10px 10px 0 0;
-  background: inherit;
-  border: 1px solid rgba(74, 58, 43, 0.18);
-  border-bottom: 0;
 }
 
 .folder-tab-label {
   display: block;
-  padding: 14px 20px 12px;
+  padding: 12px 34px 10px;
   font-family: "Space Grotesk", sans-serif;
   font-weight: 700;
   letter-spacing: 0.01em;
@@ -598,14 +593,10 @@ button:disabled {
 }
 
 .folder-tab.is-active {
-  background: linear-gradient(180deg, rgba(255, 250, 242, 1), rgba(250, 239, 225, 1));
+  background: rgba(255, 250, 242, 1);
   color: var(--text);
-  border-color: rgba(74, 58, 43, 0.28);
+  border-color: rgba(74, 58, 43, 0.22);
   box-shadow: 0 -6px 14px rgba(74, 58, 43, 0.08);
-}
-
-.folder-tab.is-active::before {
-  border-color: var(--line);
 }
 
 .folder-tab.is-active::after {
@@ -613,9 +604,9 @@ button:disabled {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: -1px;
-  height: 2px;
-  background: rgba(250, 239, 225, 1);
+  bottom: -2px;
+  height: 3px;
+  background: rgba(255, 250, 242, 1);
 }
 
 .folder-toggle {
@@ -673,7 +664,6 @@ button:disabled {
   inset: 0;
   background: transparent;
 }
-
 
 </style>
   <style data-inline-source="styles/diagram.css">
@@ -2344,14 +2334,12 @@ button:disabled {
 </style>
   <style data-inline-source="styles/theme-dark.css">
 :root[data-theme="dark"] .diagram-panel {
-  background: linear-gradient(180deg, rgba(24, 30, 39, 0.98), rgba(20, 26, 34, 0.94));
+  background: rgba(17, 22, 29, 0.96);
 }
 
 :root[data-theme="dark"] .diagram-canvas {
   border-color: rgba(255, 255, 255, 0.08);
-  background:
-    radial-gradient(circle at top center, rgba(122, 201, 200, 0.08), transparent 26%),
-    linear-gradient(180deg, rgba(14, 19, 26, 0.98), rgba(10, 14, 20, 0.96));
+  background: rgba(17, 22, 29, 0.96);
 }
 
 :root[data-theme="dark"] .canvas-grid {
@@ -2359,7 +2347,7 @@ button:disabled {
 }
 
 :root[data-theme="dark"] .folder-tabs {
-  background: linear-gradient(180deg, rgba(36, 44, 56, 0.98), rgba(28, 35, 46, 0.95));
+  background: transparent;
 }
 
 :root[data-theme="dark"] .history-button {
@@ -2396,13 +2384,13 @@ button:disabled {
 }
 
 :root[data-theme="dark"] .folder-tab.is-active {
-  background: linear-gradient(180deg, rgba(54, 64, 79, 1), rgba(39, 47, 60, 0.98));
+  background: rgba(17, 22, 29, 0.96);
   color: var(--text);
   border-color: rgba(255, 255, 255, 0.08);
 }
 
 :root[data-theme="dark"] .folder-tab.is-active::after {
-  background: rgba(39, 47, 60, 1);
+  background: rgba(17, 22, 29, 0.96);
 }
 
 :root[data-theme="dark"] .main-content,
@@ -2758,7 +2746,6 @@ button:disabled {
   box-shadow: 0 12px 24px rgba(57, 104, 173, 0.24);
 }
 
-
 </style>
   <style data-inline-source="styles/console-input.css">
 .console-input {
@@ -2921,17 +2908,15 @@ button:disabled {
     align-items: stretch;
     flex-direction: column;
     gap: 8px;
-    padding: 6px 8px 0;
-  }
-
-  .folder-tabs::after {
-    left: 8px;
-    right: 8px;
+    padding: 0 8px 0 0;
   }
 
   .folder-tab-list {
     width: 100%;
-    gap: 4px;
+    align-items: stretch;
+    gap: 0;
+    margin-left: -1px;
+    margin-top: -1px;
   }
 
   .folder-tabs-actions {
@@ -2939,6 +2924,8 @@ button:disabled {
     justify-content: flex-start;
     flex-wrap: nowrap;
     overflow-x: auto;
+    padding-left: 8px;
+    padding-top: 8px;
     padding-bottom: 2px;
     scrollbar-width: none;
   }
@@ -2951,6 +2938,8 @@ button:disabled {
     min-width: 0;
     flex: 1 1 0;
     border-radius: 12px 12px 0 0;
+    top: 0;
+    align-items: center;
   }
 
   .folder-tab-label {
@@ -3000,7 +2989,8 @@ button:disabled {
   }
 
   .main-content {
-    padding: 0 8px 8px;
+    margin: 0;
+    border-radius: 0;
   }
 
   .sidebar-panel {
@@ -3116,7 +3106,7 @@ button:disabled {
 
   .diagram-canvas {
     min-height: calc(100svh - 176px);
-    border-radius: 16px;
+    border-radius: 0;
   }
 
   .mobile-selection-controls {
@@ -3321,24 +3311,65 @@ button:disabled {
 
   .topbar {
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto;
     align-items: center;
-    gap: 6px;
+    gap: 10px;
+    margin-bottom: 6px;
+    padding: 5px 2px 7px;
   }
 
   .app-shell.is-mobile-topbar-menu-open .topbar {
-    grid-template-rows: auto auto auto;
+    grid-template-rows: auto auto;
   }
 
   .topbar-brand {
     grid-column: 1;
     grid-row: 1;
-    justify-content: space-between;
+    justify-content: flex-start;
+    padding-left: 6px;
+    transform: translateY(1px);
   }
 
   .topbar-brand h1 {
-    font-size: 1.18rem;
+    display: block;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    line-height: 1;
+  }
+
+  .brand-full {
+    display: none;
+  }
+
+  .brand-mobile {
+    display: grid;
+    grid-template-columns: auto;
+    row-gap: 2px;
+    align-items: start;
+    justify-content: start;
+  }
+
+  .brand-mobile-word {
+    display: inline-flex;
+    align-items: baseline;
+    justify-items: initial;
+    gap: 0;
+    font-size: 0;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0;
+  }
+
+  .brand-mobile-word span {
+    font-size: 0.82rem;
+    line-height: 1;
+  }
+
+  .brand-mobile-word span:first-child {
+    font-size: 1.1rem;
+    line-height: 0.85;
   }
 
   .topbar-group {
@@ -3348,7 +3379,7 @@ button:disabled {
   }
 
   .topbar-group-start {
-    grid-column: 1;
+    grid-column: 1 / -1;
     grid-row: 2;
     display: none;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3363,10 +3394,11 @@ button:disabled {
   }
 
   .topbar-group-end {
-    grid-column: 1;
-    grid-row: 2;
+    grid-column: 2;
+    grid-row: 1;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
+    gap: 5px;
+    min-width: 0;
   }
 
   .app-shell.is-mobile-topbar-menu-open .topbar-group-start {
@@ -3375,11 +3407,10 @@ button:disabled {
   }
 
   .app-shell.is-mobile-topbar-menu-open .topbar-group-end {
-    grid-row: 3;
+    grid-row: 1;
   }
 
   .topbar-brand {
-    justify-content: space-between;
     align-items: center;
   }
 
@@ -3391,17 +3422,20 @@ button:disabled {
   }
 
   .mobile-topbar-menu-toggle {
+    grid-column: 3;
+    grid-row: 1;
     display: inline-flex !important;
     align-items: center;
     justify-content: center;
-    min-width: 40px;
-    width: 40px;
-    height: 40px;
+    min-width: 38px;
+    width: 38px;
+    height: 36px;
     padding: 0;
-    font-size: 1.15rem;
+    font-size: 1rem;
     line-height: 1;
     border-radius: 12px;
     flex-shrink: 0;
+    justify-self: end;
   }
 
   .topbar-group-start .ghost-button,
@@ -3410,8 +3444,9 @@ button:disabled {
   .topbar-group-end .primary-button {
     width: 100%;
     min-width: 0;
-    padding: 0.58rem 0.66rem;
-    font-size: 0.88rem;
+    min-height: 36px;
+    padding: 0.42rem 0.46rem;
+    font-size: 0.78rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -3437,24 +3472,12 @@ button:disabled {
   }
 
   .folder-tabs {
-    gap: 6px;
-    padding: 4px 6px 0;
-  }
-
-  .folder-tabs::after {
-    left: 6px;
-    right: 6px;
+    gap: 4px;
+    padding: 0 6px 0 0;
   }
 
   .folder-tab {
     border-radius: 10px 10px 0 0;
-  }
-
-  .folder-tab::before {
-    top: -6px;
-    left: 12px;
-    width: 28px;
-    height: 10px;
   }
 
   .folder-tab-label {
@@ -3464,11 +3487,14 @@ button:disabled {
 
   .folder-tabs-actions {
     gap: 4px;
+    align-items: stretch;
+    padding-left: 6px;
+    padding-top: 6px;
   }
 
   .history-button {
-    width: 32px;
-    height: 32px;
+    width: 30px;
+    height: 30px;
   }
 
   .history-button-icon {
@@ -3478,22 +3504,38 @@ button:disabled {
   .focus-toggle-button,
   .folder-toggle,
   .topbar-toggle {
-    padding: 0.46rem 0.58rem;
-    font-size: 0.82rem;
+    min-height: 30px;
+    padding: 0.34rem 0.5rem;
+    font-size: 0.76rem;
+    margin-bottom: 2px;
+  }
+
+  .folder-toggle {
+    gap: 6px;
+  }
+
+  .folder-toggle input {
+    width: 14px;
+    height: 14px;
+  }
+
+  .folder-toggle span {
+    font-size: 0.76rem;
   }
 
   .main-content {
-    padding: 0 6px 6px;
+    margin: 0;
+    border-radius: 0;
   }
 
   .diagram-canvas {
     min-height: calc(100svh - 164px);
-    border-radius: 14px;
+    border-radius: 0;
   }
 
   .mobile-selection-controls {
     right: 8px;
-    bottom: 8px;
+    top: 8px;
     gap: 6px;
   }
 
@@ -3880,7 +3922,6 @@ button:disabled {
   }
 }
 
-
 </style>
 </head>
 <body>
@@ -3895,26 +3936,41 @@ button:disabled {
       </div>
       <div class="topbar-brand">
         <div class="topbar-brand-text">
-          <p class="eyebrow">Prototype</p>
-          <h1>AlgoFlow</h1>
+          <h1>
+            <span class="brand-full">AlgoFlow</span>
+            <span class="brand-mobile" aria-hidden="true">
+              <span class="brand-mobile-word">
+                <span>A</span>
+                <span>l</span>
+                <span>g</span>
+                <span>o</span>
+              </span>
+              <span class="brand-mobile-word">
+                <span>F</span>
+                <span>l</span>
+                <span>o</span>
+                <span>w</span>
+              </span>
+            </span>
+          </h1>
         </div>
-        <button
-          type="button"
-          class="ghost-button mobile-topbar-menu-toggle"
-          id="mobile-topbar-menu-toggle"
-          aria-controls="topbar-start-controls"
-          aria-expanded="false"
-          aria-label="Apri menu azioni"
-          hidden
-        >
-          ☰
-        </button>
       </div>
       <div class="topbar-group topbar-group-end">
         <button type="button" class="ghost-button" id="step-program-button" title="P">Passo</button>
         <button type="button" class="primary-button" id="run-program-button" title="E">Esegui</button>
         <button type="button" class="ghost-button" id="stop-program-button" title="Esc" disabled>Stop</button>
       </div>
+      <button
+        type="button"
+        class="ghost-button mobile-topbar-menu-toggle"
+        id="mobile-topbar-menu-toggle"
+        aria-controls="topbar-start-controls"
+        aria-expanded="false"
+        aria-label="Apri menu azioni"
+        hidden
+      >
+        ☰
+      </button>
     </header>
 
     <main class="workspace">
