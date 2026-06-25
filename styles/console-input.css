@@ -1,0 +1,39 @@
+.console-input {
+  display: grid;
+  gap: 6px;
+}
+
+.console-input label {
+  font-size: 0.84rem;
+  color: var(--muted);
+}
+
+.console-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.console-input input {
+  width: 100%;
+  padding: 0.78rem 0.9rem;
+  border: 1px solid rgba(74, 58, 43, 0.16);
+  border-radius: 14px;
+  background: white;
+  color: var(--text);
+}
+
+.console-input input:focus {
+  outline: 2px solid rgba(196, 92, 45, 0.22);
+  border-color: var(--primary);
+}
+
+.console-submit-button {
+  border: 0;
+  border-radius: 14px;
+  padding: 0.78rem 0.9rem;
+  min-width: 84px;
+  background: var(--primary);
+  color: #fffaf5;
+  cursor: pointer;
+}

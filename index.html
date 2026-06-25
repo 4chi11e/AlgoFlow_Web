@@ -7,7 +7,16 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles/tokens.css">
+  <link rel="stylesheet" href="styles/topbar.css">
+  <link rel="stylesheet" href="styles/workspace.css">
+  <link rel="stylesheet" href="styles/diagram.css">
+  <link rel="stylesheet" href="styles/dialogs.css">
+  <link rel="stylesheet" href="styles/code-preview.css">
+  <link rel="stylesheet" href="styles/sidebar-terminal.css">
+  <link rel="stylesheet" href="styles/theme-dark.css">
+  <link rel="stylesheet" href="styles/console-input.css">
+  <link rel="stylesheet" href="styles/responsive.css">
 </head>
 <body>
   <div class="app-shell">
@@ -350,6 +359,36 @@
   </div>
 
   <input type="file" id="load-diagram-input" accept=".algoflow.json,.json,.pdf,application/pdf,.fprg,application/xml,text/xml" hidden>
-  <script src="app.js"></script>
+  <script src="src/ui/dom-elements.js"></script>
+  <script src="src/app/config.js"></script>
+  <script src="src/diagram/node-definitions.js"></script>
+  <script src="src/app/state.js"></script>
+  <script src="src/ui/responsive-layout.js"></script>
+  <script src="src/diagram/model.js"></script>
+  <script src="src/io/file-picker.js"></script>
+  <script src="src/io/algoflow-format.js"></script>
+  <script src="src/io/flowgorithm-format.js"></script>
+  <script src="src/app/history.js"></script>
+  <script src="src/io/pdf-export.js"></script>
+  <script src="src/io/pdf-file.js"></script>
+  <script src="src/app/storage.js"></script>
+  <script src="src/app/preferences.js"></script>
+  <script src="src/ui/labels.js"></script>
+  <script src="src/ui/split-panes.js"></script>
+  <script src="src/shared/html.js"></script>
+  <script src="src/diagram/validation.js"></script>
+  <script src="src/runtime/panels.js"></script>
+  <script src="src/runtime/expressions.js"></script>
+  <script src="src/runtime/executor.js"></script>
+  <script src="src/render/variables-panel.js"></script>
+  <script src="src/render/html-flowchart.js"></script>
+  <script src="src/render/svg-layout.js"></script>
+  <script src="src/codegen/generator.js"></script>
+  <script src="src/render/flowchart-renderer.js"></script>
+  <script src="src/ui/insert-dialog.js"></script>
+  <script src="src/ui/property-dialog.js"></script>
+  <script src="src/diagram/actions.js"></script>
+  <script src="src/ui/event-bindings.js"></script>
+  <script src="src/app/bootstrap.js"></script>
 </body>
 </html>
