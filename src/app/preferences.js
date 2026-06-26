@@ -79,7 +79,7 @@ const syncFocusModeButton = () => {
 
   focusModeButton.classList.toggle("is-active", isDiagramFocusMode);
   focusModeButton.textContent = isDiagramFocusMode ? "Esci" : "Focus";
-  focusModeButton.title = isDiagramFocusMode ? "Esci dalla modalita focus (Esc)" : "Modalita focus diagramma (F)";
+  focusModeButton.title = isDiagramFocusMode ? "Esci dalla modalita focus (Esc)" : "Modalita focus vista corrente (F)";
   focusModeButton.setAttribute("aria-pressed", String(isDiagramFocusMode));
 };
 
@@ -88,15 +88,6 @@ const setDiagramFocusMode = (nextValue) => {
 
   if (isDiagramFocusMode === shouldEnable) {
     return;
-  }
-
-  if (shouldEnable) {
-    const activeMainViewId = getActiveMainViewId();
-    mainViewBeforeFocusMode = activeMainViewId === "diagram-view" ? null : activeMainViewId;
-    setActiveMainView("diagram-view");
-  } else if (mainViewBeforeFocusMode) {
-    setActiveMainView(mainViewBeforeFocusMode);
-    mainViewBeforeFocusMode = null;
   }
 
   isDiagramFocusMode = shouldEnable;

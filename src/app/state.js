@@ -27,7 +27,6 @@ let selectedCodeLanguage = "c";
 let currentTheme = "light";
 let isMobileTopbarMenuOpen = false;
 let isDiagramFocusMode = false;
-let mainViewBeforeFocusMode = null;
 let mobileSidebarView = "terminal";
 let isTouchSelectionUiForced = false;
 let isMobileMultiSelectMode = false;

@@ -10,6 +10,7 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  min-width: 0;
 }
 
 .code-preview {
@@ -23,17 +24,30 @@
   padding: 18px 20px;
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
   overflow: auto;
+  overflow-x: auto;
+  overflow-y: auto;
   color: var(--text);
   background: var(--panel-strong);
   font-family: "Space Grotesk", sans-serif;
   font-size: 1rem;
   line-height: 1.8;
-  white-space: pre-wrap;
+  white-space: pre;
+}
+
+.code-preview code {
+  display: inline-block;
+  min-width: 100%;
+  width: max-content;
 }
 
 .code-line {
   display: block;
+  min-width: 100%;
+  width: max-content;
   margin: 0 -8px;
   padding: 0 8px;
   border-radius: 6px;
@@ -57,13 +71,14 @@
 }
 
 .language-select-label select {
-  min-height: 32px;
-  width: 7.2rem;
+  min-height: var(--folder-action-size, 32px);
+  height: var(--folder-action-size, 32px);
+  width: 5.6rem;
   border: 1px solid var(--control-border);
   border-radius: var(--control-radius);
   background: var(--control-bg);
   color: var(--text);
-  padding: 0.28rem 1.8rem 0.28rem 0.68rem;
+  padding: 0.28rem 1.45rem 0.28rem 0.56rem;
   font: inherit;
 }
 

@@ -114,7 +114,7 @@ input {
   align-items: center;
   gap: 24px;
   margin-bottom: 20px;
-  background: transparent;
+  background: var(--app-surface);
 }
 
 .topbar-group {
@@ -367,9 +367,12 @@ button:disabled {
 }
 
 .diagram-panel {
+  --diagram-panel-radius: var(--radius-lg);
   position: relative;
   border-top: 0;
-  overflow: visible;
+  border-radius: var(--diagram-panel-radius);
+  overflow: hidden;
+  isolation: isolate;
   background: var(--diagram-surface);
 }
 
@@ -411,6 +414,7 @@ button:disabled {
 .diagram-canvas {
   position: relative;
   flex: 1;
+  min-width: 0;
   overflow: auto;
   display: flex;
   align-items: flex-start;
@@ -488,15 +492,19 @@ button:disabled {
 }
 
 .main-content {
+  position: relative;
+  z-index: 1;
   flex: 1;
   margin: 0;
   padding: 0;
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   border-top: 0;
-  border-radius: 0;
+  border-radius: 0 0 var(--diagram-panel-radius) var(--diagram-panel-radius);
   overflow: hidden;
+  clip-path: inset(0 round 0 0 var(--diagram-panel-radius) var(--diagram-panel-radius));
   background: var(--diagram-surface);
 }
 
@@ -505,6 +513,8 @@ button:disabled {
   display: none;
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .main-view.is-active {
@@ -512,6 +522,8 @@ button:disabled {
 }
 
 .folder-tabs {
+  --folder-actions-inline: 14px;
+  --folder-action-size: 38px;
   display: flex;
   align-items: stretch;
   flex-direction: column;
@@ -524,25 +536,30 @@ button:disabled {
 }
 
 .folder-tab-list {
-  display: flex;
+  position: relative;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: stretch;
   gap: 0;
-  width: 100%;
+  width: calc(100% + 2px);
   min-width: 0;
-  margin-left: 0;
+  margin-left: -1px;
+  margin-right: -1px;
   margin-top: 0;
+  overflow: visible;
 }
 
 .folder-tabs-actions {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: flex-start;
   gap: 10px;
   flex-wrap: wrap;
-  margin-right: 14px;
-  padding-top: 0;
-  padding-left: 14px;
-  padding-bottom: 4px;
+  margin: 0;
+  padding: 0 var(--folder-actions-inline) 4px;
 }
 
 .app-shell.is-code-view .folder-tabs-actions .language-select-label {
@@ -558,8 +575,15 @@ button:disabled {
 .focus-toggle-button {
   position: relative;
   z-index: 1;
-  margin-bottom: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--folder-action-size);
+  height: var(--folder-action-size);
+  margin-bottom: 0;
   min-width: 76px;
+  padding-top: 0;
+  padding-bottom: 0;
   flex: 0 0 auto;
 }
 
@@ -615,12 +639,17 @@ button:disabled {
   padding: 0;
   margin: 0;
   min-width: 0;
-  flex: 1 1 0;
+  width: 100%;
   border-radius: 10px 10px 0 0;
   cursor: pointer;
   display: flex;
   align-items: center;
+  justify-content: center;
   transition: transform 160ms ease, background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.folder-tab + .folder-tab {
+  border-left: 0;
 }
 
 .folder-tab-label {
@@ -632,11 +661,12 @@ button:disabled {
 }
 
 .folder-tab:hover {
-  transform: translateY(-2px);
   color: var(--text);
+  box-shadow: 0 -4px 10px rgba(74, 58, 43, 0.06);
 }
 
 .folder-tab.is-active {
+  z-index: 2;
   background: var(--diagram-surface);
   color: var(--text);
   border-color: rgba(74, 58, 43, 0.22);
@@ -646,8 +676,12 @@ button:disabled {
 .folder-toggle {
   position: relative;
   z-index: 1;
-  margin-bottom: 6px;
+  min-height: var(--folder-action-size);
+  height: var(--folder-action-size);
+  margin-bottom: 0;
   gap: 7px;
+  padding-top: 0;
+  padding-bottom: 0;
   white-space: nowrap;
 }
 
@@ -687,24 +721,26 @@ button:disabled {
   position: fixed;
   inset: 10px;
   z-index: 40;
-  border-radius: 20px;
+  --diagram-panel-radius: 20px;
+  border-top: 1px solid var(--surface-border);
 }
 
 .app-shell.is-focus-mode .folder-tabs {
-  padding-top: 14px;
+  padding-top: 0;
+}
+
+.app-shell.is-focus-mode .folder-tabs-actions {
+  padding-top: 7px;
 }
 
 .app-shell.is-focus-mode .folder-tab-list {
   display: none;
 }
 
-.app-shell.is-focus-mode .folder-tabs-actions {
-  width: 100%;
-  justify-content: flex-end;
-}
-
 .app-shell.is-focus-mode .main-content {
-  padding-top: 8px;
+  padding-top: 0;
+  border-radius: var(--diagram-panel-radius);
+  clip-path: inset(0 round var(--diagram-panel-radius));
 }
 
 .app-shell.is-focus-mode .diagram-canvas {
@@ -2029,6 +2065,7 @@ button:disabled {
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  min-width: 0;
 }
 
 .code-preview {
@@ -2042,17 +2079,30 @@ button:disabled {
   padding: 18px 20px;
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
   overflow: auto;
+  overflow-x: auto;
+  overflow-y: auto;
   color: var(--text);
   background: var(--panel-strong);
   font-family: "Space Grotesk", sans-serif;
   font-size: 1rem;
   line-height: 1.8;
-  white-space: pre-wrap;
+  white-space: pre;
+}
+
+.code-preview code {
+  display: inline-block;
+  min-width: 100%;
+  width: max-content;
 }
 
 .code-line {
   display: block;
+  min-width: 100%;
+  width: max-content;
   margin: 0 -8px;
   padding: 0 8px;
   border-radius: 6px;
@@ -2076,13 +2126,14 @@ button:disabled {
 }
 
 .language-select-label select {
-  min-height: 32px;
-  width: 7.2rem;
+  min-height: var(--folder-action-size, 32px);
+  height: var(--folder-action-size, 32px);
+  width: 5.6rem;
   border: 1px solid var(--control-border);
   border-radius: var(--control-radius);
   background: var(--control-bg);
   color: var(--text);
-  padding: 0.28rem 1.8rem 0.28rem 0.68rem;
+  padding: 0.28rem 1.45rem 0.28rem 0.56rem;
   font: inherit;
 }
 
@@ -2821,12 +2872,14 @@ button:disabled {
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
     gap: 8px;
+    margin-left: -6px;
+    margin-right: -6px;
     margin-bottom: 8px;
     position: sticky;
     top: 0;
     z-index: 30;
-    padding: 6px 0 8px;
-    background: transparent;
+    padding: 6px 6px 8px;
+    background: var(--app-surface);
   }
 
   .topbar-brand {
@@ -2907,22 +2960,27 @@ button:disabled {
   }
 
   .diagram-panel {
+    --diagram-panel-radius: 10px;
     min-height: calc(100svh - 82px);
     margin-bottom: 8px;
   }
 
   .folder-tabs {
+    --folder-actions-inline: 8px;
+    --folder-action-size: 32px;
     align-items: stretch;
     flex-direction: column;
     gap: 8px;
     padding: 0;
+    margin-bottom: -1px;
   }
 
   .folder-tab-list {
-    width: 100%;
+    width: calc(100% + 2px);
     align-items: stretch;
     gap: 0;
-    margin-left: 0;
+    margin-left: -1px;
+    margin-right: -1px;
     margin-top: 0;
   }
 
@@ -2931,10 +2989,7 @@ button:disabled {
     justify-content: flex-start;
     flex-wrap: wrap;
     overflow-x: visible;
-    padding-left: 8px;
-    margin-right: 8px;
-    padding-top: 8px;
-    padding-bottom: 2px;
+    padding-block: 8px 2px;
   }
 
   .folder-tabs-actions::-webkit-scrollbar {
@@ -2943,7 +2998,6 @@ button:disabled {
 
   .folder-tab {
     min-width: 0;
-    flex: 1 1 0;
     border-radius: 12px 12px 0 0;
     top: 0;
     align-items: center;
@@ -2987,17 +3041,23 @@ button:disabled {
 
   .app-shell.is-focus-mode .diagram-panel {
     inset: 6px;
-    border-radius: 10px;
+    --diagram-panel-radius: 10px;
+  }
+
+  .app-shell.is-focus-mode .main-content {
+    border-radius: var(--diagram-panel-radius);
+    clip-path: inset(0 round var(--diagram-panel-radius));
   }
 
   .folder-toggle {
-    align-self: flex-start;
-    margin-bottom: 2px;
+    align-self: auto;
+    margin-bottom: 0;
   }
 
   .main-content {
     margin: 0;
-    border-radius: 0;
+    border-radius: 0 0 var(--diagram-panel-radius) var(--diagram-panel-radius);
+    clip-path: inset(0 round 0 0 var(--diagram-panel-radius) var(--diagram-panel-radius));
   }
 
   .sidebar-panel {
@@ -3316,8 +3376,10 @@ button:disabled {
     grid-template-rows: auto;
     align-items: center;
     gap: 10px;
+    margin-left: -4px;
+    margin-right: -4px;
     margin-bottom: 6px;
-    padding: 5px 2px 7px;
+    padding: 5px 6px 7px;
   }
 
   .app-shell.is-mobile-topbar-menu-open .topbar {
@@ -3473,8 +3535,11 @@ button:disabled {
   }
 
   .folder-tabs {
+    --folder-actions-inline: 6px;
+    --folder-action-size: 28px;
     gap: 4px;
     padding: 0;
+    margin-bottom: -1px;
   }
 
   .folder-tab {
@@ -3489,9 +3554,7 @@ button:disabled {
   .folder-tabs-actions {
     gap: 4px;
     align-items: center;
-    padding-left: 6px;
-    margin-right: 6px;
-    padding-top: 6px;
+    padding-block: 6px 2px;
   }
 
   .history-button {
@@ -3506,20 +3569,20 @@ button:disabled {
   .focus-toggle-button,
   .folder-toggle,
   .topbar-toggle {
-    min-height: 28px;
     padding: 0.28rem 0.42rem;
     font-size: 0.7rem;
-    margin-bottom: 2px;
   }
 
   .focus-toggle-button {
     width: auto;
     min-width: 62px;
-    align-self: center;
+    align-self: auto;
+    margin-bottom: 0;
   }
 
   .folder-toggle {
     gap: 6px;
+    margin-bottom: 0;
   }
 
   .folder-toggle span {
@@ -3528,7 +3591,8 @@ button:disabled {
 
   .main-content {
     margin: 0;
-    border-radius: 0;
+    border-radius: 0 0 var(--diagram-panel-radius) var(--diagram-panel-radius);
+    clip-path: inset(0 round 0 0 var(--diagram-panel-radius) var(--diagram-panel-radius));
   }
 
   .diagram-canvas {
@@ -3649,8 +3713,8 @@ button:disabled {
 
   .language-select-label select {
     min-height: 28px;
-    width: 6.8rem;
-    padding: 0.22rem 1.55rem 0.22rem 0.55rem;
+    width: 5.1rem;
+    padding: 0.22rem 1.3rem 0.22rem 0.46rem;
   }
 
   .app-shell.is-code-view .folder-tabs-actions .language-select-label {
@@ -4524,7 +4588,6 @@ let selectedCodeLanguage = "c";
 let currentTheme = "light";
 let isMobileTopbarMenuOpen = false;
 let isDiagramFocusMode = false;
-let mainViewBeforeFocusMode = null;
 let mobileSidebarView = "terminal";
 let isTouchSelectionUiForced = false;
 let isMobileMultiSelectMode = false;
@@ -7528,7 +7591,7 @@ const syncFocusModeButton = () => {
 
   focusModeButton.classList.toggle("is-active", isDiagramFocusMode);
   focusModeButton.textContent = isDiagramFocusMode ? "Esci" : "Focus";
-  focusModeButton.title = isDiagramFocusMode ? "Esci dalla modalita focus (Esc)" : "Modalita focus diagramma (F)";
+  focusModeButton.title = isDiagramFocusMode ? "Esci dalla modalita focus (Esc)" : "Modalita focus vista corrente (F)";
   focusModeButton.setAttribute("aria-pressed", String(isDiagramFocusMode));
 };
 
@@ -7537,15 +7600,6 @@ const setDiagramFocusMode = (nextValue) => {
 
   if (isDiagramFocusMode === shouldEnable) {
     return;
-  }
-
-  if (shouldEnable) {
-    const activeMainViewId = getActiveMainViewId();
-    mainViewBeforeFocusMode = activeMainViewId === "diagram-view" ? null : activeMainViewId;
-    setActiveMainView("diagram-view");
-  } else if (mainViewBeforeFocusMode) {
-    setActiveMainView(mainViewBeforeFocusMode);
-    mainViewBeforeFocusMode = null;
   }
 
   isDiagramFocusMode = shouldEnable;

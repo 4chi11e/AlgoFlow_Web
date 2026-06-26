@@ -11,7 +11,7 @@
   align-items: center;
   gap: 24px;
   margin-bottom: 20px;
-  background: transparent;
+  background: var(--app-surface);
 }
 
 .topbar-group {
