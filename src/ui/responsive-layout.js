@@ -153,11 +153,13 @@ const setDiagramZoom = (nextZoom) => {
   );
 
   if (normalizedZoom === diagramZoom) {
+    showZoomIndicator(normalizedZoom);
     return;
   }
 
   diagramZoom = normalizedZoom;
   applyDiagramZoom();
+  showZoomIndicator(diagramZoom);
 };
 
 const getCurrentDiagramZoomPreset = () => {

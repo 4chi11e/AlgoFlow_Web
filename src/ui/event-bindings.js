@@ -197,6 +197,14 @@ const previewNodesInBox = (startX, startY, endX, endY) => {
   previewSelectedNodeIds = getNodeIdsInRect(rect);
 };
 
+const getTouchDistance = (firstTouch, secondTouch) =>
+  Math.hypot(secondTouch.clientX - firstTouch.clientX, secondTouch.clientY - firstTouch.clientY);
+
+const getTouchCenter = (firstTouch, secondTouch) => ({
+  x: (firstTouch.clientX + secondTouch.clientX) / 2,
+  y: (firstTouch.clientY + secondTouch.clientY) / 2,
+});
+
 if (diagramCanvas && selectionBox) {
   diagramCanvas.addEventListener("contextmenu", (event) => {
     event.preventDefault();
@@ -331,14 +339,6 @@ if (diagramCanvas && selectionBox) {
 
   diagramCanvas.addEventListener("pointerup", finishSelectionDrag);
   diagramCanvas.addEventListener("pointercancel", finishSelectionDrag);
-
-  const getTouchDistance = (firstTouch, secondTouch) =>
-    Math.hypot(secondTouch.clientX - firstTouch.clientX, secondTouch.clientY - firstTouch.clientY);
-
-  const getTouchCenter = (firstTouch, secondTouch) => ({
-    x: (firstTouch.clientX + secondTouch.clientX) / 2,
-    y: (firstTouch.clientY + secondTouch.clientY) / 2,
-  });
 
   diagramCanvas.addEventListener("touchstart", (event) => {
     if (event.touches.length !== 2) {
@@ -678,6 +678,72 @@ if (focusModeButton) {
   focusModeButton.addEventListener("click", () => {
     setDiagramFocusMode(!isDiagramFocusMode);
   });
+}
+
+if (codePreview) {
+  codePreview.addEventListener("wheel", (event) => {
+    if (!event.ctrlKey) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const direction = event.deltaY > 0 ? -1 : 1;
+    setCodeZoom(codeZoom + direction * CODE_ZOOM_STEP);
+  }, { passive: false });
+
+  codePreview.addEventListener("touchstart", (event) => {
+    if (event.touches.length !== 2) {
+      return;
+    }
+
+    const touchCenter = getTouchCenter(event.touches[0], event.touches[1]);
+
+    codeTouchPinchState = {
+      lastDistance: getTouchDistance(event.touches[0], event.touches[1]),
+      lastZoom: codeZoom,
+      lastCenterX: touchCenter.x,
+      lastCenterY: touchCenter.y,
+    };
+  }, { passive: true });
+
+  codePreview.addEventListener("touchmove", (event) => {
+    if (event.touches.length !== 2 || !codeTouchPinchState) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const nextDistance = getTouchDistance(event.touches[0], event.touches[1]);
+    const nextCenter = getTouchCenter(event.touches[0], event.touches[1]);
+
+    if (codeTouchPinchState.lastDistance <= 0 || nextDistance <= 0) {
+      return;
+    }
+
+    const scaleRatio = nextDistance / codeTouchPinchState.lastDistance;
+    const nextZoom = codeTouchPinchState.lastZoom * scaleRatio;
+    const deltaX = nextCenter.x - codeTouchPinchState.lastCenterX;
+    const deltaY = nextCenter.y - codeTouchPinchState.lastCenterY;
+
+    setCodeZoom(nextZoom);
+    codePreview.scrollLeft -= deltaX;
+    codePreview.scrollTop -= deltaY;
+
+    codeTouchPinchState = {
+      lastDistance: nextDistance,
+      lastZoom: codeZoom,
+      lastCenterX: nextCenter.x,
+      lastCenterY: nextCenter.y,
+    };
+  }, { passive: false });
+
+  const resetCodeTouchPinch = () => {
+    codeTouchPinchState = null;
+  };
+
+  codePreview.addEventListener("touchend", resetCodeTouchPinch, { passive: true });
+  codePreview.addEventListener("touchcancel", resetCodeTouchPinch, { passive: true });
 }
 
 if (runProgramButton) {

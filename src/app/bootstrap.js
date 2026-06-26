@@ -98,6 +98,7 @@ loadNodeLabelPreference();
 loadFlowchartState();
 loadHistoryState();
 loadCodeLanguagePreference();
+loadCodeZoomPreference();
 syncCodeLanguageTabs();
 syncFocusModeButton();
 syncMobileSidebarView();
@@ -109,4 +110,3 @@ scheduleLayoutAwareRender();
 scheduleFontAwareRender();
 syncExecutionControls();
 syncTopbarAdaptiveLayout();
-

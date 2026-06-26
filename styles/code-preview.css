@@ -33,9 +33,10 @@
   color: var(--text);
   background: var(--panel-strong);
   font-family: "Space Grotesk", sans-serif;
-  font-size: 1rem;
+  font-size: calc(1rem * var(--code-zoom, 1));
   line-height: 1.8;
   white-space: pre;
+  touch-action: pan-x pan-y;
 }
 
 .code-preview code {

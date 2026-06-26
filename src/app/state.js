@@ -24,6 +24,7 @@ let isWorkspaceSplitManual = false;
 let isSidebarSplitManual = false;
 let pendingSidebarAutoSyncFrame = null;
 let selectedCodeLanguage = "c";
+let codeZoom = 1;
 let currentTheme = "light";
 let isMobileTopbarMenuOpen = false;
 let isDiagramFocusMode = false;
@@ -33,7 +34,10 @@ let isMobileMultiSelectMode = false;
 let pendingLayoutAwareRenderFrame = null;
 let currentDiagramZoomPreset = null;
 let touchPinchState = null;
+let codeTouchPinchState = null;
 let currentCodePreviewLines = [];
+let zoomIndicatorHideTimer = null;
+let zoomIndicatorConcealTimer = null;
 
 const RUNTIME_UNDECLARED = Symbol("runtime-undeclared");
 const MAX_RUNTIME_OPERATIONS = 10000;
@@ -48,3 +52,6 @@ const DIAGRAM_ZOOM_PRESETS = {
   compact: 0.8,
   phone: 0.68,
 };
+const MIN_CODE_ZOOM = 0.2;
+const MAX_CODE_ZOOM = 3;
+const CODE_ZOOM_STEP = 0.1;

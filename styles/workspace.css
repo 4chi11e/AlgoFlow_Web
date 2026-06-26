@@ -163,6 +163,31 @@
   background: var(--diagram-surface);
 }
 
+.zoom-indicator {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 12;
+  padding: 0.34rem 0.62rem;
+  border: 1px solid var(--control-border);
+  border-radius: var(--control-radius);
+  background: rgba(255, 247, 236, 0.94);
+  color: var(--text);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.zoom-indicator.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .main-view {
   position: relative;
   display: none;

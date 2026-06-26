@@ -28,7 +28,9 @@ const showNodeTypeToggle = document.querySelector("#show-node-type-toggle");
 
 const diagramCanvas = document.querySelector("#diagram-canvas");
 const flowchartRoot = document.querySelector("#flowchart-root");
+const codePreview = document.querySelector(".code-preview");
 const codePreviewContent = document.querySelector("#code-preview-content");
+const zoomIndicator = document.querySelector("#zoom-indicator");
 const selectionBox = document.querySelector("#selection-box");
 const mobileSelectionControls = document.querySelector("#mobile-selection-controls");
 const mobileMultiSelectToggleButton = document.querySelector("#mobile-multi-select-toggle");

@@ -33,6 +33,12 @@
   border-color: rgba(122, 201, 200, 0.44);
 }
 
+:root[data-theme="dark"] .zoom-indicator {
+  background: rgba(32, 39, 50, 0.94);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
+
 :root[data-theme="dark"] .folder-toggle:has(input:checked) {
   background: rgba(122, 201, 200, 0.12);
   border-color: rgba(122, 201, 200, 0.34);

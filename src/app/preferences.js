@@ -83,6 +83,31 @@ const syncFocusModeButton = () => {
   focusModeButton.setAttribute("aria-pressed", String(isDiagramFocusMode));
 };
 
+const showZoomIndicator = (zoom) => {
+  if (!zoomIndicator) {
+    return;
+  }
+
+  window.clearTimeout(zoomIndicatorHideTimer);
+  window.clearTimeout(zoomIndicatorConcealTimer);
+
+  zoomIndicator.textContent = `${Math.round(zoom * 100)}%`;
+  zoomIndicator.hidden = false;
+
+  window.requestAnimationFrame(() => {
+    zoomIndicator.classList.add("is-visible");
+  });
+
+  zoomIndicatorHideTimer = window.setTimeout(() => {
+    zoomIndicator.classList.remove("is-visible");
+    zoomIndicatorConcealTimer = window.setTimeout(() => {
+      if (!zoomIndicator.classList.contains("is-visible")) {
+        zoomIndicator.hidden = true;
+      }
+    }, 220);
+  }, 1450);
+};
+
 const setDiagramFocusMode = (nextValue) => {
   const shouldEnable = Boolean(nextValue);
 
@@ -203,6 +228,47 @@ const loadCodeLanguagePreference = () => {
     }
   } catch {
     selectedCodeLanguage = "c";
+  }
+};
+
+const applyCodeZoom = () => {
+  const normalizedZoom = Math.min(MAX_CODE_ZOOM, Math.max(MIN_CODE_ZOOM, Number(codeZoom.toFixed(2))));
+  codeZoom = normalizedZoom;
+
+  document.documentElement.style.setProperty("--code-zoom", String(codeZoom));
+};
+
+const setCodeZoom = (nextZoom) => {
+  const normalizedZoom = Math.min(MAX_CODE_ZOOM, Math.max(MIN_CODE_ZOOM, Number(nextZoom.toFixed(2))));
+
+  if (normalizedZoom === codeZoom) {
+    applyCodeZoom();
+    showZoomIndicator(normalizedZoom);
+    return;
+  }
+
+  codeZoom = normalizedZoom;
+  applyCodeZoom();
+  saveCodeZoomPreference();
+  showZoomIndicator(codeZoom);
+};
+
+const loadCodeZoomPreference = () => {
+  try {
+    const storedValue = Number(window.localStorage.getItem(CODE_ZOOM_PREFERENCE_KEY));
+    codeZoom = Number.isFinite(storedValue) ? storedValue : 1;
+  } catch {
+    codeZoom = 1;
+  }
+
+  applyCodeZoom();
+};
+
+const saveCodeZoomPreference = () => {
+  try {
+    window.localStorage.setItem(CODE_ZOOM_PREFERENCE_KEY, String(codeZoom));
+  } catch {
+    // Ignore storage failures.
   }
 };
 

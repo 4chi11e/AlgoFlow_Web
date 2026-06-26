@@ -3,6 +3,7 @@ const HISTORY_STORAGE_KEY = "algoflow-history";
 const NODE_LABEL_PREFERENCE_KEY = "flowgorithm-web-show-node-type";
 const MAIN_VIEW_PREFERENCE_KEY = "algoflow-main-view";
 const CODE_LANGUAGE_PREFERENCE_KEY = "algoflow-code-language";
+const CODE_ZOOM_PREFERENCE_KEY = "algoflow-code-zoom";
 const THEME_PREFERENCE_KEY = "algoflow-theme";
 const TOUCH_SELECTION_OVERRIDE_KEY = "algoflow-force-touch-selection-ui";
 const ALGOFLOW_FILE_FORMAT = "algoflow";
