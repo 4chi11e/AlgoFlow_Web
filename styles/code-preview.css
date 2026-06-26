@@ -8,32 +8,14 @@
 .code-canvas {
   display: flex;
   flex-direction: column;
-  gap: 6px;
   flex: 1;
   min-height: 0;
-  padding-top: 6px;
 }
 
-.code-card,
 .code-preview {
   background: var(--panel-strong);
-  border: 1px solid var(--surface-border);
-  border-radius: 20px;
-}
-
-.code-card {
-  padding: 14px 18px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin: 0;
-}
-
-.code-card h3 {
-  font-size: 1rem;
-  line-height: 1.2;
+  border: 0;
+  border-radius: 12px;
 }
 
 .code-preview {
@@ -43,8 +25,7 @@
   min-height: 0;
   overflow: auto;
   color: var(--text);
-  background:
-    linear-gradient(180deg, rgba(255, 250, 242, 0.98), rgba(244, 233, 219, 0.98));
+  background: var(--panel-strong);
   font-family: "Space Grotesk", sans-serif;
   font-size: 1rem;
   line-height: 1.8;
@@ -55,7 +36,7 @@
   display: block;
   margin: 0 -8px;
   padding: 0 8px;
-  border-radius: 8px;
+  border-radius: 6px;
   transition: background-color 140ms ease, box-shadow 140ms ease;
 }
 
@@ -64,28 +45,29 @@
   box-shadow: inset 3px 0 0 rgba(196, 92, 45, 0.92);
 }
 
-.language-tab {
-  border: 1px solid var(--control-border);
-  border-radius: 999px;
-  background: var(--control-bg);
+.language-select-label {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
   color: var(--muted);
-  padding: 0.55rem 0.95rem;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(74, 58, 43, 0.06);
-  transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.8rem;
+  font-weight: 700;
 }
 
-.language-tab:hover {
-  transform: translateY(-1px);
-  background: var(--control-bg-hover);
-  border-color: rgba(74, 58, 43, 0.42);
+.language-select-label select {
+  min-height: 32px;
+  width: 7.2rem;
+  border: 1px solid var(--control-border);
+  border-radius: var(--control-radius);
+  background: var(--control-bg);
   color: var(--text);
-  box-shadow: 0 8px 18px rgba(74, 58, 43, 0.12);
+  padding: 0.28rem 1.8rem 0.28rem 0.68rem;
+  font: inherit;
 }
 
-.language-tab.is-active {
-  background: var(--secondary);
-  color: #f7f3ec;
-  border-color: rgba(19, 62, 61, 0.5);
+.language-select-label option {
+  background: var(--app-surface);
+  color: var(--text);
 }
-

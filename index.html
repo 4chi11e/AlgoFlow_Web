@@ -88,9 +88,17 @@
               </button>
             </div>
             <button type="button" class="ghost-button focus-toggle-button" id="focus-mode-button" title="F">Focus</button>
-            <label class="topbar-toggle folder-toggle" for="show-node-type-toggle">
+            <label class="topbar-toggle folder-toggle" for="show-node-type-toggle" title="Mostra nome nodo">
               <input type="checkbox" id="show-node-type-toggle">
-              <span>Mostra nome nodo</span>
+              <span>Nomi nodi</span>
+            </label>
+            <label class="language-select-label" for="code-language-select">
+              <span>Linguaggio</span>
+              <select id="code-language-select">
+                <option value="c">C</option>
+                <option value="cpp">C++</option>
+                <option value="python">Python</option>
+              </select>
             </label>
           </div>
         </div>
@@ -302,14 +310,6 @@
 
           <section class="main-view" id="code-view" role="tabpanel" hidden>
             <div class="code-canvas">
-              <div class="code-card">
-                <h3>Vista codice</h3>
-                <div class="language-tabs" role="tablist" aria-label="Selezione linguaggio">
-                  <button type="button" class="language-tab is-active" data-code-language="c" aria-selected="true">C</button>
-                  <button type="button" class="language-tab" data-code-language="cpp" aria-selected="false">C++</button>
-                  <button type="button" class="language-tab" data-code-language="python" aria-selected="false">Python</button>
-                </div>
-              </div>
               <pre class="code-preview"><code id="code-preview-content"></code></pre>
             </div>
           </section>

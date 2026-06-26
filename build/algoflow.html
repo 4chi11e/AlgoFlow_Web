@@ -9,10 +9,15 @@
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <style data-inline-source="styles/tokens.css">
 :root {
-  --bg: #f3efe7;
-  --bg-accent: #e6dccf;
-  --panel: rgba(255, 250, 242, 0.96);
-  --panel-strong: #fff8ef;
+  --app-surface: #fffaf2;
+  --bg: var(--app-surface);
+  --bg-accent: var(--app-surface);
+  --panel: var(--app-surface);
+  --panel-strong: var(--app-surface);
+  --diagram-surface: var(--app-surface);
+  --tab-inactive-bg: #e7d9c8;
+  --resizer-bg: #d2bfa7;
+  --resizer-bg-active: var(--primary);
   --line: rgba(74, 58, 43, 0.22);
   --surface-border: rgba(74, 58, 43, 0.24);
   --control-bg: #fff7ec;
@@ -24,19 +29,25 @@
   --primary-dark: #9d471f;
   --secondary: #1f5c5b;
   --shadow: 0 20px 60px rgba(74, 58, 43, 0.16);
-  --radius-lg: 28px;
-  --radius-md: 18px;
-  --radius-sm: 12px;
+  --radius-lg: 18px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+  --control-radius: 18px;
   --workspace-sidebar-size: 380px;
   --sidebar-top-size: 55%;
   color-scheme: light;
 }
 
 :root[data-theme="dark"] {
-  --bg: #12161c;
-  --bg-accent: #1b2430;
-  --panel: rgba(24, 30, 39, 0.9);
-  --panel-strong: #1c232d;
+  --app-surface: #11161d;
+  --bg: var(--app-surface);
+  --bg-accent: var(--app-surface);
+  --panel: var(--app-surface);
+  --panel-strong: var(--app-surface);
+  --diagram-surface: var(--app-surface);
+  --tab-inactive-bg: #202732;
+  --resizer-bg: #303947;
+  --resizer-bg-active: var(--primary);
   --line: rgba(221, 228, 240, 0.12);
   --surface-border: rgba(221, 228, 240, 0.12);
   --control-bg: rgba(255, 255, 255, 0.06);
@@ -48,6 +59,7 @@
   --primary-dark: #ab572e;
   --secondary: #7ac9c8;
   --shadow: 0 24px 70px rgba(0, 0, 0, 0.34);
+  --control-radius: 18px;
   color-scheme: dark;
 }
 
@@ -63,16 +75,19 @@ html,
 body {
   margin: 0;
   min-height: 100%;
+  background: var(--app-surface);
 }
 
 body {
   font-family: "Manrope", sans-serif;
   color: var(--text);
-  background: var(--bg);
+  background: var(--app-surface);
+  background-image: none;
 }
 
 :root[data-theme="dark"] body {
-  background: var(--bg);
+  background: var(--app-surface);
+  background-image: none;
 }
 
 body.is-drag-selecting {
@@ -84,13 +99,13 @@ input {
   font: inherit;
 }
 
-
 </style>
   <style data-inline-source="styles/topbar.css">
 .app-shell {
   height: 100vh;
   padding: 14px;
   overflow: hidden;
+  background: var(--bg);
 }
 
 .topbar {
@@ -99,6 +114,7 @@ input {
   align-items: center;
   gap: 24px;
   margin-bottom: 20px;
+  background: transparent;
 }
 
 .topbar-group {
@@ -176,8 +192,7 @@ h1 {
   font-size: clamp(2rem, 2.35vw, 2.8rem);
 }
 
-.topbar-actions,
-.language-tabs {
+.topbar-actions {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
@@ -186,10 +201,10 @@ h1 {
 .topbar-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 0.72rem 1rem;
+  gap: 8px;
+  padding: 0.62rem 0.88rem;
   border: 1px solid var(--control-border);
-  border-radius: 999px;
+  border-radius: var(--control-radius);
   background: var(--control-bg);
   color: var(--text);
   cursor: pointer;
@@ -204,14 +219,15 @@ h1 {
 }
 
 .topbar-toggle span {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
 }
 
 .ghost-button,
 .primary-button {
   border: 1px solid var(--control-border);
-  border-radius: 999px;
-  padding: 0.72rem 1rem;
+  border-radius: var(--control-radius);
+  padding: 0.62rem 0.88rem;
+  font-size: 0.94rem;
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(74, 58, 43, 0.08);
   transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
@@ -246,6 +262,21 @@ h1 {
   border-color: rgba(75, 31, 12, 0.56);
 }
 
+.topbar .topbar-toggle,
+.topbar .ghost-button,
+.topbar .primary-button,
+.topbar .mobile-topbar-menu-toggle,
+.topbar .topbar-toggle:hover,
+.topbar .topbar-toggle:focus-visible,
+.topbar .ghost-button:hover,
+.topbar .ghost-button:focus-visible,
+.topbar .primary-button:hover,
+.topbar .primary-button:focus-visible,
+.topbar .mobile-topbar-menu-toggle:hover,
+.topbar .mobile-topbar-menu-toggle:focus-visible {
+  box-shadow: none;
+}
+
 button:disabled {
   cursor: not-allowed;
   opacity: 0.56;
@@ -255,7 +286,7 @@ button:disabled {
 
 :root[data-theme="dark"] .topbar-toggle,
 :root[data-theme="dark"] .ghost-button,
-:root[data-theme="dark"] .language-tab,
+:root[data-theme="dark"] .language-select-label select,
 :root[data-theme="dark"] .property-field input,
 :root[data-theme="dark"] .property-field textarea,
 :root[data-theme="dark"] .console-input-row input,
@@ -318,14 +349,14 @@ button:disabled {
   gap: 0;
   height: calc(100vh - 98px);
   min-height: 0;
+  background: var(--app-surface);
 }
 
 .panel {
   background: var(--panel);
   border: 1px solid var(--surface-border);
-  box-shadow: var(--shadow);
+  box-shadow: none;
   border-radius: var(--radius-lg);
-  backdrop-filter: blur(14px);
 }
 
 .diagram-panel,
@@ -336,8 +367,10 @@ button:disabled {
 }
 
 .diagram-panel {
-  overflow: hidden;
-  background: rgba(255, 250, 242, 1);
+  position: relative;
+  border-top: 0;
+  overflow: visible;
+  background: var(--diagram-surface);
 }
 
 .workspace-resizer {
@@ -363,15 +396,15 @@ button:disabled {
   z-index: 1;
   width: 8px;
   height: 58px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, rgba(226, 207, 183, 0.98), rgba(196, 174, 146, 0.98));
+  border-radius: var(--control-radius);
+  background: var(--resizer-bg);
   border: 1px solid rgba(74, 58, 43, 0.24);
   box-shadow: 0 2px 8px rgba(74, 58, 43, 0.12);
 }
 
 .workspace-resizer.is-dragging .workspace-resizer-handle,
 .workspace-resizer:hover .workspace-resizer-handle {
-  background: linear-gradient(180deg, rgba(196, 92, 45, 0.9), rgba(165, 74, 35, 0.92));
+  background: var(--resizer-bg-active);
   border-color: transparent;
 }
 
@@ -384,7 +417,7 @@ button:disabled {
   justify-content: center;
   border-radius: 0;
   border: 0;
-  background: rgba(255, 250, 242, 1);
+  background: var(--diagram-surface);
   min-height: 0;
 }
 
@@ -404,7 +437,7 @@ button:disabled {
 
 .mobile-selection-button {
   border: 1px solid var(--control-border);
-  border-radius: 999px;
+  border-radius: var(--control-radius);
   background: rgba(255, 247, 236, 0.94);
   color: var(--text);
   font-family: "Space Grotesk", sans-serif;
@@ -464,7 +497,7 @@ button:disabled {
   border-top: 0;
   border-radius: 0;
   overflow: hidden;
-  background: rgba(255, 250, 242, 1);
+  background: var(--diagram-surface);
 }
 
 .main-view {
@@ -480,31 +513,40 @@ button:disabled {
 
 .folder-tabs {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 14px 0 0;
+  align-items: stretch;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0;
   position: relative;
   margin-bottom: -1px;
   z-index: 2;
+  background: var(--diagram-surface);
 }
 
 .folder-tab-list {
   display: flex;
-  align-items: flex-end;
+  align-items: stretch;
   gap: 0;
+  width: 100%;
   min-width: 0;
-  margin-left: -1px;
+  margin-left: 0;
   margin-top: 0;
 }
 
 .folder-tabs-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 10px;
   flex-wrap: wrap;
+  margin-right: 14px;
   padding-top: 0;
+  padding-left: 14px;
+  padding-bottom: 4px;
+}
+
+.app-shell.is-code-view .folder-tabs-actions .language-select-label {
+  display: inline-flex;
 }
 
 .history-actions {
@@ -517,7 +559,8 @@ button:disabled {
   position: relative;
   z-index: 1;
   margin-bottom: 6px;
-  min-width: 84px;
+  min-width: 76px;
+  flex: 0 0 auto;
 }
 
 .focus-toggle-button.is-active {
@@ -532,14 +575,14 @@ button:disabled {
 }
 
 .history-button {
-  width: 42px;
-  height: 42px;
+  width: 38px;
+  height: 38px;
   border: 1px solid var(--control-border);
-  border-radius: 999px;
+  border-radius: 16px;
   background: var(--control-bg);
   color: var(--text);
   cursor: pointer;
-  font-size: 1.15rem;
+  font-size: 1rem;
   line-height: 1;
   transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
   box-shadow: 0 2px 8px rgba(74, 58, 43, 0.08);
@@ -547,7 +590,7 @@ button:disabled {
 
 .history-button-icon {
   display: inline-block;
-  font-size: 1.3rem;
+  font-size: 1.15rem;
   font-weight: 700;
   transform: translateY(-1px);
 }
@@ -567,12 +610,13 @@ button:disabled {
   top: 0;
   border: 1px solid rgba(74, 58, 43, 0.22);
   border-bottom: 0;
-  background: linear-gradient(180deg, rgba(239, 225, 207, 0.98), rgba(222, 204, 180, 0.98));
+  background: var(--tab-inactive-bg);
   color: var(--muted);
   padding: 0;
   margin: 0;
-  min-width: 138px;
-  border-radius: 16px 16px 0 0;
+  min-width: 0;
+  flex: 1 1 0;
+  border-radius: 10px 10px 0 0;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -581,7 +625,7 @@ button:disabled {
 
 .folder-tab-label {
   display: block;
-  padding: 12px 34px 10px;
+  padding: 9px 24px 8px;
   font-family: "Space Grotesk", sans-serif;
   font-weight: 700;
   letter-spacing: 0.01em;
@@ -593,27 +637,35 @@ button:disabled {
 }
 
 .folder-tab.is-active {
-  background: rgba(255, 250, 242, 1);
+  background: var(--diagram-surface);
   color: var(--text);
   border-color: rgba(74, 58, 43, 0.22);
   box-shadow: 0 -6px 14px rgba(74, 58, 43, 0.08);
-}
-
-.folder-tab.is-active::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -2px;
-  height: 3px;
-  background: rgba(255, 250, 242, 1);
 }
 
 .folder-toggle {
   position: relative;
   z-index: 1;
   margin-bottom: 6px;
+  gap: 7px;
   white-space: nowrap;
+}
+
+.folder-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.folder-toggle:has(input:checked) {
+  background: rgba(31, 92, 91, 0.1);
+  border-color: rgba(31, 92, 91, 0.34);
+  color: var(--secondary);
+}
+
+.folder-toggle:has(input:focus-visible) {
+  outline: 2px solid rgba(31, 92, 91, 0.32);
+  outline-offset: 2px;
 }
 
 .app-shell.is-focus-mode {
@@ -635,7 +687,7 @@ button:disabled {
   position: fixed;
   inset: 10px;
   z-index: 40;
-  border-radius: 30px;
+  border-radius: 20px;
 }
 
 .app-shell.is-focus-mode .folder-tabs {
@@ -656,7 +708,7 @@ button:disabled {
 }
 
 .app-shell.is-focus-mode .diagram-canvas {
-  border-radius: 24px;
+  border-radius: 16px;
 }
 
 .canvas-grid {
@@ -910,7 +962,7 @@ button:disabled {
   padding: 12px 28px;
   border-radius: 999px;
   border: 3px solid #9c78b2;
-  background: linear-gradient(180deg, #ecdffa, #e1cff6);
+  background: #ecdffa;
   color: #23182a;
   font-family: "Space Grotesk", sans-serif;
   font-size: 1.15rem;
@@ -1167,7 +1219,6 @@ button:disabled {
   grid-template-columns: 80px auto 80px;
 }
 
-
 </style>
   <style data-inline-source="styles/dialogs.css">
 .insert-dialog-backdrop {
@@ -1189,7 +1240,7 @@ button:disabled {
   overflow: auto;
   background: rgba(255, 251, 246, 0.98);
   border: 1px solid var(--surface-border);
-  border-radius: 22px;
+  border-radius: 10px;
   box-shadow: 0 20px 70px rgba(74, 58, 43, 0.18);
   padding: 22px;
 }
@@ -1211,7 +1262,7 @@ button:disabled {
   max-height: min(820px, calc(100vh - 60px));
   background: rgba(255, 251, 246, 0.99);
   border: 1px solid var(--surface-border);
-  border-radius: 20px;
+  border-radius: 10px;
   box-shadow: 0 24px 60px rgba(74, 58, 43, 0.22);
   overflow: hidden;
   display: flex;
@@ -1232,7 +1283,7 @@ button:disabled {
   gap: 18px;
   align-items: center;
   padding: 22px 28px;
-  background: linear-gradient(180deg, #1d5fa8, #16599d);
+  background: #1d5fa8;
   color: #f9fbff;
 }
 
@@ -1275,7 +1326,7 @@ button:disabled {
   align-items: start;
   gap: 10px;
   padding: 14px 16px;
-  border-radius: 16px;
+  border-radius: 8px;
   border: 1px solid rgba(196, 92, 45, 0.24);
   background: rgba(255, 248, 242, 0.98);
   color: var(--text);
@@ -1297,7 +1348,7 @@ button:disabled {
   border: 1px solid var(--control-border);
   width: 30px;
   height: 30px;
-  border-radius: 999px;
+  border-radius: var(--control-radius);
   background: var(--control-bg);
   color: var(--text);
   cursor: pointer;
@@ -1318,7 +1369,7 @@ button:disabled {
   width: 100%;
   padding: 0.95rem 1rem;
   border: 1px solid var(--control-border);
-  border-radius: 14px;
+  border-radius: 10px;
   background: #fffdf8;
   color: var(--text);
 }
@@ -1353,7 +1404,7 @@ button:disabled {
   gap: 6px;
   padding: 8px;
   border: 1px solid var(--surface-border);
-  border-radius: 14px;
+  border-radius: 10px;
   background: rgba(255, 251, 246, 0.98);
   box-shadow: 0 10px 24px rgba(74, 58, 43, 0.12);
   max-height: 180px;
@@ -1395,7 +1446,7 @@ button:disabled {
   display: block;
   padding: 0.7rem 0.85rem;
   border: 1px dashed rgba(74, 58, 43, 0.25);
-  border-radius: 12px;
+  border-radius: 8px;
   background: rgba(255, 251, 246, 0.72);
 }
 
@@ -1505,7 +1556,7 @@ button:disabled {
 .property-button {
   min-width: 132px;
   border: 1px solid var(--control-border);
-  border-radius: 14px;
+  border-radius: 10px;
   background: var(--control-bg);
   color: var(--text);
   padding: 0.9rem 1rem;
@@ -1554,7 +1605,7 @@ button:disabled {
   z-index: 3;
   width: min(420px, calc(100% - 44px));
   padding: 14px 16px;
-  border-radius: 16px;
+  border-radius: 8px;
   border: 1px solid rgba(196, 92, 45, 0.24);
   background: rgba(255, 248, 242, 0.98);
   color: var(--text);
@@ -1576,7 +1627,7 @@ button:disabled {
   width: 30px;
   height: 30px;
   border: 1px solid var(--control-border);
-  border-radius: 999px;
+  border-radius: var(--control-radius);
   background: var(--control-bg);
   color: var(--text);
   cursor: pointer;
@@ -1590,7 +1641,7 @@ button:disabled {
   color: var(--text);
   width: 38px;
   height: 38px;
-  border-radius: 999px;
+  border-radius: var(--control-radius);
   cursor: pointer;
   font-size: 1.4rem;
   line-height: 1;
@@ -1629,7 +1680,7 @@ button:disabled {
   align-content: center;
   gap: 10px;
   border: 1px solid var(--control-border);
-  border-radius: 18px;
+  border-radius: 8px;
   background: var(--control-bg);
   color: var(--text);
   cursor: pointer;
@@ -1656,7 +1707,7 @@ button:disabled {
 
 .quick-action-paste {
   border-color: rgba(73, 123, 194, 0.28);
-  background: linear-gradient(180deg, rgba(241, 247, 255, 0.98), rgba(228, 239, 252, 0.92));
+  background: #eef4fd;
 }
 
 .quick-action-paste:hover,
@@ -1687,7 +1738,7 @@ button:disabled {
   height: 28px;
   border: 2px solid #6b8fc8;
   border-radius: 4px;
-  background: linear-gradient(180deg, #bfd6fb, #97b8ea);
+  background: #bfd6fb;
   box-shadow: inset 0 -6px 0 rgba(58, 95, 154, 0.14);
 }
 
@@ -1712,7 +1763,7 @@ button:disabled {
   height: 28px;
   border: 2px solid #90a9cf;
   border-radius: 3px;
-  background: linear-gradient(180deg, #ffffff, #eef4fd);
+  background: #ffffff;
   box-shadow: inset 0 -6px 0 rgba(103, 131, 181, 0.08);
 }
 
@@ -1964,7 +2015,6 @@ button:disabled {
   display: block;
 }
 
-
 </style>
   <style data-inline-source="styles/code-preview.css">
 .info-card p,
@@ -1977,32 +2027,14 @@ button:disabled {
 .code-canvas {
   display: flex;
   flex-direction: column;
-  gap: 6px;
   flex: 1;
   min-height: 0;
-  padding-top: 6px;
 }
 
-.code-card,
 .code-preview {
   background: var(--panel-strong);
-  border: 1px solid var(--surface-border);
-  border-radius: 20px;
-}
-
-.code-card {
-  padding: 14px 18px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin: 0;
-}
-
-.code-card h3 {
-  font-size: 1rem;
-  line-height: 1.2;
+  border: 0;
+  border-radius: 12px;
 }
 
 .code-preview {
@@ -2012,8 +2044,7 @@ button:disabled {
   min-height: 0;
   overflow: auto;
   color: var(--text);
-  background:
-    linear-gradient(180deg, rgba(255, 250, 242, 0.98), rgba(244, 233, 219, 0.98));
+  background: var(--panel-strong);
   font-family: "Space Grotesk", sans-serif;
   font-size: 1rem;
   line-height: 1.8;
@@ -2024,7 +2055,7 @@ button:disabled {
   display: block;
   margin: 0 -8px;
   padding: 0 8px;
-  border-radius: 8px;
+  border-radius: 6px;
   transition: background-color 140ms ease, box-shadow 140ms ease;
 }
 
@@ -2033,31 +2064,32 @@ button:disabled {
   box-shadow: inset 3px 0 0 rgba(196, 92, 45, 0.92);
 }
 
-.language-tab {
-  border: 1px solid var(--control-border);
-  border-radius: 999px;
-  background: var(--control-bg);
+.language-select-label {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
   color: var(--muted);
-  padding: 0.55rem 0.95rem;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(74, 58, 43, 0.06);
-  transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.8rem;
+  font-weight: 700;
 }
 
-.language-tab:hover {
-  transform: translateY(-1px);
-  background: var(--control-bg-hover);
-  border-color: rgba(74, 58, 43, 0.42);
+.language-select-label select {
+  min-height: 32px;
+  width: 7.2rem;
+  border: 1px solid var(--control-border);
+  border-radius: var(--control-radius);
+  background: var(--control-bg);
   color: var(--text);
-  box-shadow: 0 8px 18px rgba(74, 58, 43, 0.12);
+  padding: 0.28rem 1.8rem 0.28rem 0.68rem;
+  font: inherit;
 }
 
-.language-tab.is-active {
-  background: var(--secondary);
-  color: #f7f3ec;
-  border-color: rgba(19, 62, 61, 0.5);
+.language-select-label option {
+  background: var(--app-surface);
+  color: var(--text);
 }
-
 
 </style>
   <style data-inline-source="styles/sidebar-terminal.css">
@@ -2078,8 +2110,8 @@ button:disabled {
   min-width: 0;
   border: 1px solid rgba(74, 58, 43, 0.18);
   border-bottom: 0;
-  border-radius: 14px 14px 0 0;
-  background: linear-gradient(180deg, rgba(239, 225, 207, 0.98), rgba(222, 204, 180, 0.98));
+  border-radius: 10px 10px 0 0;
+  background: var(--tab-inactive-bg);
   color: var(--muted);
   padding: 0.55rem 0.85rem 0.5rem;
   cursor: pointer;
@@ -2093,14 +2125,14 @@ button:disabled {
   left: 14px;
   width: 34px;
   height: 12px;
-  border-radius: 8px 8px 0 0;
+  border-radius: 6px 6px 0 0;
   background: inherit;
   border: 1px solid rgba(74, 58, 43, 0.18);
   border-bottom: 0;
 }
 
 .mobile-sidebar-tab.is-active {
-  background: linear-gradient(180deg, rgba(255, 250, 242, 1), rgba(250, 239, 225, 1));
+  background: var(--panel-strong);
   color: var(--text);
   border-color: rgba(74, 58, 43, 0.28);
   box-shadow: 0 -6px 14px rgba(74, 58, 43, 0.08);
@@ -2117,7 +2149,7 @@ button:disabled {
   right: 0;
   bottom: -1px;
   height: 2px;
-  background: rgba(250, 239, 225, 1);
+  background: var(--panel-strong);
 }
 
 .sidebar-content {
@@ -2166,15 +2198,15 @@ button:disabled {
   z-index: 1;
   width: 54px;
   height: 8px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, rgba(226, 207, 183, 0.98), rgba(196, 174, 146, 0.98));
+  border-radius: var(--control-radius);
+  background: var(--resizer-bg);
   border: 1px solid rgba(74, 58, 43, 0.24);
   box-shadow: 0 2px 8px rgba(74, 58, 43, 0.12);
 }
 
 .sidebar-resizer.is-dragging .sidebar-resizer-handle,
 .sidebar-resizer:hover .sidebar-resizer-handle {
-  background: linear-gradient(180deg, rgba(196, 92, 45, 0.9), rgba(165, 74, 35, 0.92));
+  background: var(--resizer-bg-active);
   border-color: transparent;
 }
 
@@ -2256,7 +2288,7 @@ button:disabled {
   align-items: center;
   min-height: 28px;
   padding: 0.28rem 0.7rem;
-  border-radius: 999px;
+  border-radius: var(--control-radius);
   background: rgba(31, 92, 91, 0.1);
   color: var(--secondary);
   font-size: 0.82rem;
@@ -2287,8 +2319,8 @@ button:disabled {
   gap: 8px;
   padding: 10px 12px;
   border: 1px solid rgba(74, 58, 43, 0.22);
-  border-radius: 12px;
-  background: rgba(255, 250, 242, 0.82);
+  border-radius: 8px;
+  background: var(--panel-strong);
   align-content: start;
 }
 
@@ -2303,7 +2335,7 @@ button:disabled {
   word-break: break-word;
   max-width: min(85%, 420px);
   padding: 8px 10px;
-  border-radius: 12px;
+  border-radius: 8px;
   background: rgba(239, 228, 213, 0.66);
   color: var(--text);
 }
@@ -2333,20 +2365,11 @@ button:disabled {
 
 </style>
   <style data-inline-source="styles/theme-dark.css">
-:root[data-theme="dark"] .diagram-panel {
-  background: rgba(17, 22, 29, 0.96);
-}
-
 :root[data-theme="dark"] .diagram-canvas {
   border-color: rgba(255, 255, 255, 0.08);
-  background: rgba(17, 22, 29, 0.96);
 }
 
 :root[data-theme="dark"] .canvas-grid {
-  background: transparent;
-}
-
-:root[data-theme="dark"] .folder-tabs {
   background: transparent;
 }
 
@@ -2361,8 +2384,7 @@ button:disabled {
 :root[data-theme="dark"] .history-button:hover,
 :root[data-theme="dark"] .history-button:focus-visible,
 :root[data-theme="dark"] .property-button:hover,
-:root[data-theme="dark"] .property-button:focus-visible,
-:root[data-theme="dark"] .language-tab:hover {
+:root[data-theme="dark"] .property-button:focus-visible {
   background: var(--control-bg-hover);
   border-color: rgba(255, 255, 255, 0.18);
 }
@@ -2378,29 +2400,30 @@ button:disabled {
   border-color: rgba(122, 201, 200, 0.44);
 }
 
-:root[data-theme="dark"] .folder-tab {
-  background: linear-gradient(180deg, rgba(41, 49, 62, 0.98), rgba(32, 39, 50, 0.95));
-  color: var(--muted);
+:root[data-theme="dark"] .folder-toggle:has(input:checked) {
+  background: rgba(122, 201, 200, 0.12);
+  border-color: rgba(122, 201, 200, 0.34);
+  color: #d5fbfa;
+}
+
+:root[data-theme="dark"] .language-select-label select,
+:root[data-theme="dark"] .language-select-label option {
+  background: #202732;
+  color: var(--text);
 }
 
 :root[data-theme="dark"] .folder-tab.is-active {
-  background: rgba(17, 22, 29, 0.96);
+  background: var(--diagram-surface);
   color: var(--text);
   border-color: rgba(255, 255, 255, 0.08);
 }
 
-:root[data-theme="dark"] .folder-tab.is-active::after {
-  background: rgba(17, 22, 29, 0.96);
-}
-
-:root[data-theme="dark"] .main-content,
 :root[data-theme="dark"] .sidebar-panel {
-  background: rgba(17, 22, 29, 0.96);
+  background: var(--diagram-surface);
 }
 
 :root[data-theme="dark"] .code-preview {
-  background: linear-gradient(180deg, rgba(20, 26, 34, 0.96), rgba(25, 31, 40, 0.98));
-  border-color: rgba(255, 255, 255, 0.08);
+  background: var(--panel-strong);
 }
 
 :root[data-theme="dark"] .code-line.is-executing {
@@ -2408,23 +2431,18 @@ button:disabled {
   box-shadow: inset 3px 0 0 rgba(122, 201, 200, 0.94);
 }
 
-:root[data-theme="dark"] .mobile-sidebar-tab {
-  background: linear-gradient(180deg, rgba(41, 49, 62, 0.98), rgba(32, 39, 50, 0.95));
-  color: var(--muted);
-}
-
 :root[data-theme="dark"] .mobile-sidebar-tab.is-active {
-  background: linear-gradient(180deg, rgba(54, 64, 79, 1), rgba(39, 47, 60, 0.98));
+  background: var(--panel-strong);
   color: var(--text);
   border-color: rgba(255, 255, 255, 0.08);
 }
 
 :root[data-theme="dark"] .mobile-sidebar-tab.is-active::after {
-  background: rgba(39, 47, 60, 1);
+  background: var(--panel-strong);
 }
 
 :root[data-theme="dark"] .console-output {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--panel-strong);
   border-color: rgba(255, 255, 255, 0.08);
 }
 
@@ -2452,7 +2470,7 @@ button:disabled {
 }
 
 :root[data-theme="dark"] .property-dialog-hero {
-  background: linear-gradient(180deg, #254f75, #1d3f5f);
+  background: #254f75;
   color: #f5f9ff;
 }
 
@@ -2625,7 +2643,7 @@ button:disabled {
 
 :root[data-theme="dark"] .terminal-node {
   border-color: #ab8cc3;
-  background: linear-gradient(180deg, #e4d6f4, #d8c5ee);
+  background: #e4d6f4;
   color: #23182a;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
 }
@@ -2737,7 +2755,7 @@ button:disabled {
 
 :root[data-theme="dark"] .quick-action-paste {
   border-color: rgba(112, 162, 230, 0.34);
-  background: linear-gradient(180deg, rgba(34, 51, 74, 0.98), rgba(24, 39, 58, 0.96));
+  background: #22334a;
 }
 
 :root[data-theme="dark"] .quick-action-paste:hover,
@@ -2768,7 +2786,7 @@ button:disabled {
   width: 100%;
   padding: 0.78rem 0.9rem;
   border: 1px solid rgba(74, 58, 43, 0.16);
-  border-radius: 14px;
+  border-radius: 10px;
   background: white;
   color: var(--text);
 }
@@ -2780,7 +2798,7 @@ button:disabled {
 
 .console-submit-button {
   border: 0;
-  border-radius: 14px;
+  border-radius: 10px;
   padding: 0.78rem 0.9rem;
   min-width: 84px;
   background: var(--primary);
@@ -2808,9 +2826,7 @@ button:disabled {
     top: 0;
     z-index: 30;
     padding: 6px 0 8px;
-    background:
-      linear-gradient(180deg, rgba(243, 239, 231, 0.98), rgba(243, 239, 231, 0.92));
-    backdrop-filter: blur(14px);
+    background: transparent;
   }
 
   .topbar-brand {
@@ -2870,9 +2886,9 @@ button:disabled {
   .topbar-group .ghost-button,
   .topbar-group .primary-button {
     flex: 0 0 auto;
-    padding: 0.58rem 0.72rem;
+    padding: 0.48rem 0.62rem;
     white-space: nowrap;
-    font-size: 0.92rem;
+    font-size: 0.84rem;
     text-align: center;
   }
 
@@ -2895,39 +2911,30 @@ button:disabled {
     margin-bottom: 8px;
   }
 
-  .code-card {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 10px 12px;
-    margin-top: 0;
-  }
-
   .folder-tabs {
     align-items: stretch;
     flex-direction: column;
     gap: 8px;
-    padding: 0 8px 0 0;
+    padding: 0;
   }
 
   .folder-tab-list {
     width: 100%;
     align-items: stretch;
     gap: 0;
-    margin-left: -1px;
-    margin-top: -1px;
+    margin-left: 0;
+    margin-top: 0;
   }
 
   .folder-tabs-actions {
     gap: 6px;
     justify-content: flex-start;
-    flex-wrap: nowrap;
-    overflow-x: auto;
+    flex-wrap: wrap;
+    overflow-x: visible;
     padding-left: 8px;
+    margin-right: 8px;
     padding-top: 8px;
     padding-bottom: 2px;
-    scrollbar-width: none;
   }
 
   .folder-tabs-actions::-webkit-scrollbar {
@@ -2959,19 +2966,19 @@ button:disabled {
   }
 
   .history-button {
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
   }
 
   .history-button-icon {
-    font-size: 1.15rem;
+    font-size: 1rem;
   }
 
   .focus-toggle-button,
   .folder-toggle,
   .topbar-toggle {
-    padding: 0.58rem 0.72rem;
-    font-size: 0.9rem;
+    padding: 0.46rem 0.62rem;
+    font-size: 0.82rem;
   }
 
   .app-shell.is-focus-mode {
@@ -2980,7 +2987,7 @@ button:disabled {
 
   .app-shell.is-focus-mode .diagram-panel {
     inset: 6px;
-    border-radius: 20px;
+    border-radius: 10px;
   }
 
   .folder-toggle {
@@ -3099,7 +3106,7 @@ button:disabled {
 
   .console-input input,
   .console-submit-button {
-    border-radius: 12px;
+    border-radius: 8px;
     padding: 0.62rem 0.72rem;
     font-size: 0.92rem;
   }
@@ -3146,7 +3153,7 @@ button:disabled {
   .insert-dialog {
     width: min(720px, 100%);
     padding: 14px;
-    border-radius: 22px;
+    border-radius: 10px;
   }
 
   .insert-dialog-header {
@@ -3162,7 +3169,7 @@ button:disabled {
     top: 72px;
     width: min(360px, calc(100% - 28px));
     padding: 12px 14px;
-    border-radius: 14px;
+    border-radius: 10px;
   }
 
   .property-dialog-backdrop {
@@ -3172,7 +3179,7 @@ button:disabled {
   .property-dialog {
     width: min(640px, 100%);
     max-height: min(760px, calc(100vh - 24px));
-    border-radius: 18px;
+    border-radius: 8px;
   }
 
   .property-dialog-header {
@@ -3224,7 +3231,7 @@ button:disabled {
     top: -10px;
     width: min(360px, calc(100% - 32px));
     padding: 12px 14px;
-    border-radius: 14px;
+    border-radius: 10px;
     font-size: 0.88rem;
   }
 
@@ -3242,7 +3249,7 @@ button:disabled {
   .property-field input,
   .property-field textarea {
     padding: 0.8rem 0.88rem;
-    border-radius: 12px;
+    border-radius: 8px;
   }
 
   .declare-fields {
@@ -3269,7 +3276,7 @@ button:disabled {
   .property-button {
     min-width: 118px;
     padding: 0.78rem 0.9rem;
-    border-radius: 12px;
+    border-radius: 8px;
   }
 
   .checkbox-option {
@@ -3296,12 +3303,6 @@ button:disabled {
     min-height: 360px;
   }
 
-}
-
-@media (max-width: 1000px) {
-  :root[data-theme="dark"] .topbar {
-    background: rgba(18, 22, 28, 0.96);
-  }
 }
 
 @media (max-width: 680px) {
@@ -3388,9 +3389,9 @@ button:disabled {
     margin-top: 0;
     padding: 8px;
     border: 1px solid var(--surface-border);
-    border-radius: 14px;
+    border-radius: 10px;
     background: var(--panel);
-    box-shadow: 0 10px 24px rgba(74, 58, 43, 0.14);
+    box-shadow: none;
   }
 
   .topbar-group-end {
@@ -3433,7 +3434,7 @@ button:disabled {
     padding: 0;
     font-size: 1rem;
     line-height: 1;
-    border-radius: 12px;
+    border-radius: 8px;
     flex-shrink: 0;
     justify-self: end;
   }
@@ -3444,9 +3445,9 @@ button:disabled {
   .topbar-group-end .primary-button {
     width: 100%;
     min-width: 0;
-    min-height: 36px;
-    padding: 0.42rem 0.46rem;
-    font-size: 0.78rem;
+    min-height: 32px;
+    padding: 0.34rem 0.4rem;
+    font-size: 0.72rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -3454,8 +3455,8 @@ button:disabled {
 
   .topbar-group-start .ghost-button,
   .topbar-group-start .primary-button {
-    padding: 0.5rem 0.5rem;
-    font-size: 0.8rem;
+    padding: 0.4rem 0.44rem;
+    font-size: 0.74rem;
   }
 
   .topbar-group-start #theme-toggle-button {
@@ -3463,17 +3464,17 @@ button:disabled {
   }
 
   .panel {
-    border-radius: 20px;
+    border-radius: 10px;
   }
 
   .diagram-panel,
   .sidebar-panel {
-    border-radius: 20px;
+    border-radius: 10px;
   }
 
   .folder-tabs {
     gap: 4px;
-    padding: 0 6px 0 0;
+    padding: 0;
   }
 
   .folder-tab {
@@ -3487,14 +3488,15 @@ button:disabled {
 
   .folder-tabs-actions {
     gap: 4px;
-    align-items: stretch;
+    align-items: center;
     padding-left: 6px;
+    margin-right: 6px;
     padding-top: 6px;
   }
 
   .history-button {
-    width: 30px;
-    height: 30px;
+    width: 28px;
+    height: 28px;
   }
 
   .history-button-icon {
@@ -3504,19 +3506,20 @@ button:disabled {
   .focus-toggle-button,
   .folder-toggle,
   .topbar-toggle {
-    min-height: 30px;
-    padding: 0.34rem 0.5rem;
-    font-size: 0.76rem;
+    min-height: 28px;
+    padding: 0.28rem 0.42rem;
+    font-size: 0.7rem;
     margin-bottom: 2px;
+  }
+
+  .focus-toggle-button {
+    width: auto;
+    min-width: 62px;
+    align-self: center;
   }
 
   .folder-toggle {
     gap: 6px;
-  }
-
-  .folder-toggle input {
-    width: 14px;
-    height: 14px;
   }
 
   .folder-toggle span {
@@ -3640,29 +3643,25 @@ button:disabled {
     font-size: 0.84rem;
   }
 
-  .code-card {
-    gap: 8px;
-    padding: 10px 12px;
+  .language-select-label {
+    font-size: 0.7rem;
   }
 
-  .code-card h3 {
-    display: none;
+  .language-select-label select {
+    min-height: 28px;
+    width: 6.8rem;
+    padding: 0.22rem 1.55rem 0.22rem 0.55rem;
   }
 
-  .language-tabs {
-    gap: 4px;
-  }
-
-  .language-tab {
-    padding: 0.34rem 0.58rem;
-    font-size: 0.74rem;
+  .app-shell.is-code-view .folder-tabs-actions .language-select-label {
+    display: inline-flex;
   }
 
   .code-preview {
     padding: 10px 12px;
     font-size: 0.84rem;
     line-height: 1.5;
-    border-radius: 14px;
+    border-radius: 10px;
   }
 
   .code-line {
@@ -3690,7 +3689,7 @@ button:disabled {
 
   .insert-dialog,
   .property-dialog {
-    border-radius: 20px;
+    border-radius: 10px;
   }
 
   .insert-dialog {
@@ -3711,7 +3710,7 @@ button:disabled {
     top: 64px;
     width: min(320px, calc(100% - 22px));
     padding: 10px 12px;
-    border-radius: 12px;
+    border-radius: 8px;
     font-size: 0.84rem;
   }
 
@@ -3731,7 +3730,7 @@ button:disabled {
   .property-dialog {
     width: min(520px, 100%);
     max-height: calc(100vh - 16px);
-    border-radius: 16px;
+    border-radius: 8px;
   }
 
   .property-dialog-header {
@@ -3773,7 +3772,7 @@ button:disabled {
     top: -8px;
     width: min(320px, calc(100% - 24px));
     padding: 10px 12px;
-    border-radius: 12px;
+    border-radius: 8px;
     font-size: 0.82rem;
   }
 
@@ -3837,7 +3836,7 @@ button:disabled {
     min-width: 0;
     padding: 10px 10px;
     gap: 8px;
-    border-radius: 12px;
+    border-radius: 8px;
   }
 
   .quick-action-label {
@@ -3994,9 +3993,17 @@ button:disabled {
               </button>
             </div>
             <button type="button" class="ghost-button focus-toggle-button" id="focus-mode-button" title="F">Focus</button>
-            <label class="topbar-toggle folder-toggle" for="show-node-type-toggle">
+            <label class="topbar-toggle folder-toggle" for="show-node-type-toggle" title="Mostra nome nodo">
               <input type="checkbox" id="show-node-type-toggle">
-              <span>Mostra nome nodo</span>
+              <span>Nomi nodi</span>
+            </label>
+            <label class="language-select-label" for="code-language-select">
+              <span>Linguaggio</span>
+              <select id="code-language-select">
+                <option value="c">C</option>
+                <option value="cpp">C++</option>
+                <option value="python">Python</option>
+              </select>
             </label>
           </div>
         </div>
@@ -4208,14 +4215,6 @@ button:disabled {
 
           <section class="main-view" id="code-view" role="tabpanel" hidden>
             <div class="code-canvas">
-              <div class="code-card">
-                <h3>Vista codice</h3>
-                <div class="language-tabs" role="tablist" aria-label="Selezione linguaggio">
-                  <button type="button" class="language-tab is-active" data-code-language="c" aria-selected="true">C</button>
-                  <button type="button" class="language-tab" data-code-language="cpp" aria-selected="false">C++</button>
-                  <button type="button" class="language-tab" data-code-language="python" aria-selected="false">Python</button>
-                </div>
-              </div>
               <pre class="code-preview"><code id="code-preview-content"></code></pre>
             </div>
           </section>
@@ -4283,7 +4282,7 @@ button:disabled {
   <script data-inline-source="src/ui/dom-elements.js">
 const mainTabs = document.querySelectorAll(".folder-tab");
 const mainViews = document.querySelectorAll(".main-view");
-const languageTabs = document.querySelectorAll(".language-tab");
+const languageSelect = document.querySelector("#code-language-select");
 const mobileSidebarTabs = document.querySelectorAll(".mobile-sidebar-tab");
 const appShell = document.querySelector(".app-shell");
 const workspace = document.querySelector(".workspace");
@@ -7501,6 +7500,7 @@ const setActiveMainView = (targetId) => {
     item.setAttribute("aria-selected", String(isTarget));
   });
 
+  appShell?.classList.toggle("is-code-view", targetId === "code-view");
   syncMobileSelectionControls();
 };
 
@@ -7770,26 +7770,22 @@ mainTabs.forEach((tab) => {
 });
 
 const syncCodeLanguageTabs = () => {
-  languageTabs.forEach((tab) => {
-    const isActive = tab.dataset.codeLanguage === selectedCodeLanguage;
-    tab.classList.toggle("is-active", isActive);
-    tab.setAttribute("aria-selected", String(isActive));
-  });
+  if (languageSelect) {
+    languageSelect.value = selectedCodeLanguage;
+  }
 };
 
-languageTabs.forEach((tab) => {
-  tab.addEventListener("click", () => {
-    const nextLanguage = tab.dataset.codeLanguage;
+languageSelect?.addEventListener("change", () => {
+  const nextLanguage = languageSelect.value;
 
-    if (!nextLanguage || nextLanguage === selectedCodeLanguage) {
-      return;
-    }
+  if (!nextLanguage || nextLanguage === selectedCodeLanguage) {
+    return;
+  }
 
-    selectedCodeLanguage = nextLanguage;
-    saveCodeLanguagePreference();
-    syncCodeLanguageTabs();
-    renderCodePreview();
-  });
+  selectedCodeLanguage = nextLanguage;
+  saveCodeLanguagePreference();
+  syncCodeLanguageTabs();
+  renderCodePreview();
 });
 
 mobileSidebarTabs.forEach((tab) => {

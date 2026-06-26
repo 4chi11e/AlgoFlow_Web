@@ -51,6 +51,7 @@ const setActiveMainView = (targetId) => {
     item.setAttribute("aria-selected", String(isTarget));
   });
 
+  appShell?.classList.toggle("is-code-view", targetId === "code-view");
   syncMobileSelectionControls();
 };
 

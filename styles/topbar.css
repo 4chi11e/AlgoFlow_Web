@@ -2,6 +2,7 @@
   height: 100vh;
   padding: 14px;
   overflow: hidden;
+  background: var(--bg);
 }
 
 .topbar {
@@ -10,6 +11,7 @@
   align-items: center;
   gap: 24px;
   margin-bottom: 20px;
+  background: transparent;
 }
 
 .topbar-group {
@@ -87,8 +89,7 @@ h1 {
   font-size: clamp(2rem, 2.35vw, 2.8rem);
 }
 
-.topbar-actions,
-.language-tabs {
+.topbar-actions {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
@@ -97,10 +98,10 @@ h1 {
 .topbar-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 0.72rem 1rem;
+  gap: 8px;
+  padding: 0.62rem 0.88rem;
   border: 1px solid var(--control-border);
-  border-radius: 999px;
+  border-radius: var(--control-radius);
   background: var(--control-bg);
   color: var(--text);
   cursor: pointer;
@@ -115,14 +116,15 @@ h1 {
 }
 
 .topbar-toggle span {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
 }
 
 .ghost-button,
 .primary-button {
   border: 1px solid var(--control-border);
-  border-radius: 999px;
-  padding: 0.72rem 1rem;
+  border-radius: var(--control-radius);
+  padding: 0.62rem 0.88rem;
+  font-size: 0.94rem;
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(74, 58, 43, 0.08);
   transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
@@ -157,6 +159,21 @@ h1 {
   border-color: rgba(75, 31, 12, 0.56);
 }
 
+.topbar .topbar-toggle,
+.topbar .ghost-button,
+.topbar .primary-button,
+.topbar .mobile-topbar-menu-toggle,
+.topbar .topbar-toggle:hover,
+.topbar .topbar-toggle:focus-visible,
+.topbar .ghost-button:hover,
+.topbar .ghost-button:focus-visible,
+.topbar .primary-button:hover,
+.topbar .primary-button:focus-visible,
+.topbar .mobile-topbar-menu-toggle:hover,
+.topbar .mobile-topbar-menu-toggle:focus-visible {
+  box-shadow: none;
+}
+
 button:disabled {
   cursor: not-allowed;
   opacity: 0.56;
@@ -166,7 +183,7 @@ button:disabled {
 
 :root[data-theme="dark"] .topbar-toggle,
 :root[data-theme="dark"] .ghost-button,
-:root[data-theme="dark"] .language-tab,
+:root[data-theme="dark"] .language-select-label select,
 :root[data-theme="dark"] .property-field input,
 :root[data-theme="dark"] .property-field textarea,
 :root[data-theme="dark"] .console-input-row input,

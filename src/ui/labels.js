@@ -61,26 +61,22 @@ mainTabs.forEach((tab) => {
 });
 
 const syncCodeLanguageTabs = () => {
-  languageTabs.forEach((tab) => {
-    const isActive = tab.dataset.codeLanguage === selectedCodeLanguage;
-    tab.classList.toggle("is-active", isActive);
-    tab.setAttribute("aria-selected", String(isActive));
-  });
+  if (languageSelect) {
+    languageSelect.value = selectedCodeLanguage;
+  }
 };
 
-languageTabs.forEach((tab) => {
-  tab.addEventListener("click", () => {
-    const nextLanguage = tab.dataset.codeLanguage;
+languageSelect?.addEventListener("change", () => {
+  const nextLanguage = languageSelect.value;
 
-    if (!nextLanguage || nextLanguage === selectedCodeLanguage) {
-      return;
-    }
+  if (!nextLanguage || nextLanguage === selectedCodeLanguage) {
+    return;
+  }
 
-    selectedCodeLanguage = nextLanguage;
-    saveCodeLanguagePreference();
-    syncCodeLanguageTabs();
-    renderCodePreview();
-  });
+  selectedCodeLanguage = nextLanguage;
+  saveCodeLanguagePreference();
+  syncCodeLanguageTabs();
+  renderCodePreview();
 });
 
 mobileSidebarTabs.forEach((tab) => {

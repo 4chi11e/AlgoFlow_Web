@@ -1,6 +1,6 @@
 const mainTabs = document.querySelectorAll(".folder-tab");
 const mainViews = document.querySelectorAll(".main-view");
-const languageTabs = document.querySelectorAll(".language-tab");
+const languageSelect = document.querySelector("#code-language-select");
 const mobileSidebarTabs = document.querySelectorAll(".mobile-sidebar-tab");
 const appShell = document.querySelector(".app-shell");
 const workspace = document.querySelector(".workspace");
