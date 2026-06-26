@@ -200,32 +200,39 @@
   }
 
   .sidebar-panel {
-    padding: 8px;
+    padding: 0;
     min-height: auto;
+    overflow: visible;
+    border-top: 0;
   }
 
   .mobile-sidebar-tabs {
     display: flex;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px;
-    margin-bottom: 8px;
-    padding: 0 0 1px;
+    align-items: stretch;
+    gap: 0;
+    margin: 0 -1px;
+    padding: 0;
   }
 
   .mobile-sidebar-tabs::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    border-bottom: 1px solid rgba(74, 58, 43, 0.1);
+    content: none;
   }
 
   .mobile-sidebar-tab {
     flex: 1 1 0;
+    margin: 0;
     padding: 0.5rem 0.7rem 0.46rem;
     font-size: 0.9rem;
     text-align: center;
+    border-radius: 10px 10px 0 0;
+  }
+
+  .mobile-sidebar-tab + .mobile-sidebar-tab {
+    margin-left: -1px;
+  }
+
+  .mobile-sidebar-tab::before {
+    content: none;
   }
 
   .sidebar-content {
@@ -773,25 +780,18 @@
   }
 
   .sidebar-panel {
-    padding: 6px;
+    padding: 0;
   }
 
   .mobile-sidebar-tabs {
-    gap: 4px;
-    margin-bottom: 6px;
+    gap: 0;
+    margin: 0 -1px;
   }
 
   .mobile-sidebar-tab {
     padding: 0.42rem 0.56rem 0.38rem;
     font-size: 0.82rem;
     border-radius: 10px 10px 0 0;
-  }
-
-  .mobile-sidebar-tab::before {
-    top: -6px;
-    left: 12px;
-    width: 26px;
-    height: 10px;
   }
 
   .section-heading {

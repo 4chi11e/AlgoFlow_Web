@@ -2171,7 +2171,9 @@ button:disabled {
 </style>
   <style data-inline-source="styles/sidebar-terminal.css">
 .sidebar-panel {
-  padding: 14px;
+  padding: 0;
+  overflow: hidden;
+  background: var(--panel-strong);
 }
 
 .mobile-sidebar-tabs {
@@ -2240,9 +2242,9 @@ button:disabled {
 .sidebar-section,
 .variables-table,
 .console-shell {
-  background: var(--panel-strong);
-  border: 1px solid var(--surface-border);
-  border-radius: var(--radius-md);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
 }
 
 .sidebar-section {
@@ -3093,32 +3095,39 @@ button:disabled {
   }
 
   .sidebar-panel {
-    padding: 8px;
+    padding: 0;
     min-height: auto;
+    overflow: visible;
+    border-top: 0;
   }
 
   .mobile-sidebar-tabs {
     display: flex;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px;
-    margin-bottom: 8px;
-    padding: 0 0 1px;
+    align-items: stretch;
+    gap: 0;
+    margin: 0 -1px;
+    padding: 0;
   }
 
   .mobile-sidebar-tabs::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    border-bottom: 1px solid rgba(74, 58, 43, 0.1);
+    content: none;
   }
 
   .mobile-sidebar-tab {
     flex: 1 1 0;
+    margin: 0;
     padding: 0.5rem 0.7rem 0.46rem;
     font-size: 0.9rem;
     text-align: center;
+    border-radius: 10px 10px 0 0;
+  }
+
+  .mobile-sidebar-tab + .mobile-sidebar-tab {
+    margin-left: -1px;
+  }
+
+  .mobile-sidebar-tab::before {
+    content: none;
   }
 
   .sidebar-content {
@@ -3666,25 +3675,18 @@ button:disabled {
   }
 
   .sidebar-panel {
-    padding: 6px;
+    padding: 0;
   }
 
   .mobile-sidebar-tabs {
-    gap: 4px;
-    margin-bottom: 6px;
+    gap: 0;
+    margin: 0 -1px;
   }
 
   .mobile-sidebar-tab {
     padding: 0.42rem 0.56rem 0.38rem;
     font-size: 0.82rem;
     border-radius: 10px 10px 0 0;
-  }
-
-  .mobile-sidebar-tab::before {
-    top: -6px;
-    left: 12px;
-    width: 26px;
-    height: 10px;
   }
 
   .section-heading {
@@ -4328,55 +4330,53 @@ button:disabled {
         <div class="workspace-resizer-handle"></div>
       </div>
 
-      <aside class="panel sidebar-panel" aria-label="Pannello laterale">
+      <aside class="panel sidebar-panel sidebar-content" aria-label="Pannello laterale">
         <div class="mobile-sidebar-tabs" role="tablist" aria-label="Vista pannello laterale">
           <button type="button" class="mobile-sidebar-tab is-active" data-sidebar-target="variables" aria-selected="true">Variabili</button>
           <button type="button" class="mobile-sidebar-tab" data-sidebar-target="terminal" aria-selected="false">Terminale</button>
         </div>
-        <div class="sidebar-content">
-          <section class="sidebar-section variables-section" aria-labelledby="variables-title">
-            <div class="section-heading">
-              <h3 id="variables-title">Variabili</h3>
-            </div>
-            <div class="variables-table">
-              <div class="table-head">
-                <span>Nome</span>
-                <span>Tipo</span>
-                <span>Valore</span>
-              </div>
-              <div class="variables-body" id="variables-body">
-                <div class="table-row muted">
-                  <span>Nessuna variabile</span>
-                  <span>-</span>
-                  <span>-</span>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <div class="sidebar-resizer" id="sidebar-resizer" aria-hidden="true">
-            <div class="sidebar-resizer-handle"></div>
+        <section class="sidebar-section variables-section" aria-labelledby="variables-title">
+          <div class="section-heading">
+            <h3 id="variables-title">Variabili</h3>
           </div>
-
-          <section class="sidebar-section terminal-section" aria-labelledby="terminal-title">
-            <div class="section-heading">
-              <h3 id="terminal-title">Terminale</h3>
-              <span class="console-status" id="terminal-status">Pronto</span>
+          <div class="variables-table">
+            <div class="table-head">
+              <span>Nome</span>
+              <span>Tipo</span>
+              <span>Valore</span>
             </div>
-            <div class="console-shell">
-              <div class="console-output" id="console-output">
-                <p class="console-empty">Nessun output</p>
+            <div class="variables-body" id="variables-body">
+              <div class="table-row muted">
+                <span>Nessuna variabile</span>
+                <span>-</span>
+                <span>-</span>
               </div>
-              <form class="console-input" id="console-input-form" hidden>
-                <label for="console-input-field" id="console-input-label">Input utente</label>
-                <div class="console-input-row">
-                  <input type="text" id="console-input-field" autocomplete="off" placeholder="Scrivi qui...">
-                  <button type="submit" class="console-submit-button" id="console-input-button">Invia</button>
-                </div>
-              </form>
             </div>
-          </section>
+          </div>
+        </section>
+
+        <div class="sidebar-resizer" id="sidebar-resizer" aria-hidden="true">
+          <div class="sidebar-resizer-handle"></div>
         </div>
+
+        <section class="sidebar-section terminal-section" aria-labelledby="terminal-title">
+          <div class="section-heading">
+            <h3 id="terminal-title">Terminale</h3>
+            <span class="console-status" id="terminal-status">Pronto</span>
+          </div>
+          <div class="console-shell">
+            <div class="console-output" id="console-output">
+              <p class="console-empty">Nessun output</p>
+            </div>
+            <form class="console-input" id="console-input-form" hidden>
+              <label for="console-input-field" id="console-input-label">Input utente</label>
+              <div class="console-input-row">
+                <input type="text" id="console-input-field" autocomplete="off" placeholder="Scrivi qui...">
+                <button type="submit" class="console-submit-button" id="console-input-button">Invia</button>
+              </div>
+            </form>
+          </div>
+        </section>
       </aside>
     </main>
   </div>
