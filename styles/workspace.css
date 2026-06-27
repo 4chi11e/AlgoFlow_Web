@@ -1,0 +1,434 @@
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16px minmax(320px, var(--workspace-sidebar-size));
+  gap: 0;
+  height: calc(100vh - 98px);
+  min-height: 0;
+  background: var(--app-surface);
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--surface-border);
+  box-shadow: none;
+  border-radius: var(--radius-lg);
+}
+
+.diagram-panel,
+.sidebar-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.diagram-panel {
+  --diagram-panel-radius: var(--radius-lg);
+  position: relative;
+  border-top: 0;
+  border-radius: var(--diagram-panel-radius);
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--diagram-surface);
+}
+
+.workspace-resizer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+}
+
+.workspace-resizer::before {
+  content: "";
+  width: 1px;
+  height: 100%;
+  background: rgba(74, 58, 43, 0.2);
+  position: absolute;
+}
+
+.workspace-resizer-handle {
+  position: relative;
+  z-index: 1;
+  width: 8px;
+  height: 58px;
+  border-radius: var(--control-radius);
+  background: var(--resizer-bg);
+  border: 1px solid rgba(74, 58, 43, 0.24);
+  box-shadow: 0 2px 8px rgba(74, 58, 43, 0.12);
+}
+
+.workspace-resizer.is-dragging .workspace-resizer-handle,
+.workspace-resizer:hover .workspace-resizer-handle {
+  background: var(--resizer-bg-active);
+  border-color: transparent;
+}
+
+.diagram-canvas {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  border-radius: 0;
+  border: 0;
+  background: var(--diagram-surface);
+  min-height: 0;
+}
+
+.mobile-selection-controls {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  z-index: 8;
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mobile-selection-controls[hidden] {
+  display: none;
+}
+
+.mobile-selection-button {
+  border: 1px solid var(--control-border);
+  border-radius: var(--control-radius);
+  background: rgba(255, 247, 236, 0.94);
+  color: var(--text);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.86rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 0.58rem 0.9rem;
+  box-shadow: 0 8px 22px rgba(74, 58, 43, 0.2);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease, border-color 160ms ease;
+}
+
+.mobile-selection-button:hover,
+.mobile-selection-button:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(74, 58, 43, 0.22);
+  background: rgba(255, 240, 221, 0.98);
+}
+
+.mobile-selection-button.is-active {
+  background: rgba(31, 92, 91, 0.96);
+  border-color: rgba(16, 56, 55, 0.64);
+  color: #f5fbfb;
+}
+
+.mobile-selection-button.mobile-selection-button-danger {
+  background: rgba(196, 92, 45, 0.96);
+  border-color: rgba(99, 45, 20, 0.48);
+  color: #fff8f4;
+}
+
+.mobile-selection-button.mobile-selection-button-danger:hover,
+.mobile-selection-button.mobile-selection-button-danger:focus-visible {
+  background: rgba(157, 71, 31, 0.98);
+}
+
+.diagram-canvas.is-panning {
+  cursor: grabbing;
+}
+
+.flowchart-root {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.main-content {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 0;
+  border-radius: 0 0 var(--diagram-panel-radius) var(--diagram-panel-radius);
+  overflow: hidden;
+  clip-path: inset(0 round 0 0 var(--diagram-panel-radius) var(--diagram-panel-radius));
+  background: var(--diagram-surface);
+}
+
+.zoom-indicator {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 12;
+  padding: 0.34rem 0.62rem;
+  border: 1px solid var(--control-border);
+  border-radius: var(--control-radius);
+  background: rgba(255, 247, 236, 0.94);
+  color: var(--text);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.zoom-indicator.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.main-view {
+  position: relative;
+  display: none;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.main-view.is-active {
+  display: flex;
+}
+
+.folder-tabs {
+  --folder-actions-inline: 14px;
+  --folder-action-size: 38px;
+  display: flex;
+  align-items: stretch;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0;
+  position: relative;
+  margin-bottom: -1px;
+  z-index: 2;
+  background: var(--diagram-surface);
+}
+
+.folder-tab-list {
+  position: relative;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 0;
+  width: calc(100% + 2px);
+  min-width: 0;
+  margin-left: -1px;
+  margin-right: -1px;
+  margin-top: 0;
+  overflow: visible;
+}
+
+.folder-tabs-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0 var(--folder-actions-inline) 4px;
+}
+
+.app-shell.is-code-view .folder-tabs-actions .language-select-label {
+  display: inline-flex;
+}
+
+.history-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.focus-toggle-button {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--folder-action-size);
+  height: var(--folder-action-size);
+  margin-bottom: 0;
+  min-width: 76px;
+  padding-top: 0;
+  padding-bottom: 0;
+  flex: 0 0 auto;
+}
+
+.focus-toggle-button.is-active {
+  background: rgba(196, 92, 45, 0.16);
+  color: var(--primary-dark);
+}
+
+.touch-selection-override-button.is-active {
+  background: rgba(31, 92, 91, 0.16);
+  color: var(--secondary);
+  border-color: rgba(31, 92, 91, 0.34);
+}
+
+.history-button {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--control-border);
+  border-radius: 16px;
+  background: var(--control-bg);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  box-shadow: 0 2px 8px rgba(74, 58, 43, 0.08);
+}
+
+.history-button-icon {
+  display: inline-block;
+  font-size: 1.15rem;
+  font-weight: 700;
+  transform: translateY(-1px);
+}
+
+.history-button:hover,
+.history-button:focus-visible {
+  transform: translateY(-1px);
+  background: var(--control-bg-hover);
+  border-color: rgba(74, 58, 43, 0.42);
+  box-shadow: 0 8px 18px rgba(74, 58, 43, 0.14);
+  outline: none;
+}
+
+.folder-tab {
+  position: relative;
+  z-index: 1;
+  top: 0;
+  border: 1px solid rgba(74, 58, 43, 0.22);
+  border-bottom: 0;
+  background: var(--tab-inactive-bg);
+  color: var(--muted);
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  width: 100%;
+  border-radius: 10px 10px 0 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 160ms ease, background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.folder-tab + .folder-tab {
+  border-left: 0;
+}
+
+.folder-tab-label {
+  display: block;
+  padding: 9px 24px 8px;
+  font-family: "Space Grotesk", sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.folder-tab:hover {
+  color: var(--text);
+  box-shadow: 0 -4px 10px rgba(74, 58, 43, 0.06);
+}
+
+.folder-tab.is-active {
+  z-index: 2;
+  background: var(--diagram-surface);
+  color: var(--text);
+  border-color: rgba(74, 58, 43, 0.22);
+  box-shadow: 0 -6px 14px rgba(74, 58, 43, 0.08);
+}
+
+.folder-toggle {
+  position: relative;
+  z-index: 1;
+  min-height: var(--folder-action-size);
+  height: var(--folder-action-size);
+  margin-bottom: 0;
+  gap: 7px;
+  padding-top: 0;
+  padding-bottom: 0;
+  white-space: nowrap;
+}
+
+.folder-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.folder-toggle:has(input:checked) {
+  background: rgba(31, 92, 91, 0.1);
+  border-color: rgba(31, 92, 91, 0.34);
+  color: var(--secondary);
+}
+
+.folder-toggle:has(input:focus-visible) {
+  outline: 2px solid rgba(31, 92, 91, 0.32);
+  outline-offset: 2px;
+}
+
+.app-shell.is-focus-mode {
+  padding: 10px;
+}
+
+.app-shell.is-focus-mode .topbar,
+.app-shell.is-focus-mode .sidebar-panel,
+.app-shell.is-focus-mode .workspace-resizer {
+  display: none;
+}
+
+.app-shell.is-focus-mode .workspace {
+  grid-template-columns: minmax(0, 1fr);
+  height: calc(100vh - 20px);
+}
+
+.app-shell.is-focus-mode .diagram-panel {
+  position: fixed;
+  inset: 10px;
+  z-index: 40;
+  --diagram-panel-radius: 20px;
+  border-top: 1px solid var(--surface-border);
+}
+
+.app-shell.is-focus-mode .folder-tabs {
+  padding-top: 0;
+}
+
+.app-shell.is-focus-mode .folder-tabs-actions {
+  padding-top: 7px;
+}
+
+.app-shell.is-focus-mode .folder-tab-list {
+  display: none;
+}
+
+.app-shell.is-focus-mode .main-content {
+  padding-top: 0;
+  border-radius: var(--diagram-panel-radius);
+  clip-path: inset(0 round var(--diagram-panel-radius));
+}
+
+.app-shell.is-focus-mode .diagram-canvas {
+  border-radius: 16px;
+}
+
+.canvas-grid {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+}
