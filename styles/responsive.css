@@ -1,5 +1,6 @@
 @media (max-width: 1000px) {
   .app-shell {
+    --mobile-terminal-viewport-offset: 88px;
     padding: 6px;
     height: auto;
     min-height: 100vh;
@@ -207,10 +208,12 @@
   }
 
   .mobile-sidebar-tabs {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: stretch;
     gap: 0;
-    margin: 0 -1px;
+    width: 100%;
+    margin: 0;
     padding: 0;
   }
 
@@ -219,7 +222,7 @@
   }
 
   .mobile-sidebar-tab {
-    flex: 1 1 0;
+    width: 100%;
     margin: 0;
     padding: 0.5rem 0.7rem 0.46rem;
     font-size: 0.9rem;
@@ -228,7 +231,15 @@
   }
 
   .mobile-sidebar-tab + .mobile-sidebar-tab {
-    margin-left: -1px;
+    border-left: 0;
+  }
+
+  .mobile-sidebar-tab:first-child {
+    border-left: 0;
+  }
+
+  .mobile-sidebar-tab:last-child {
+    border-right: 0;
   }
 
   .mobile-sidebar-tab::before {
@@ -256,9 +267,22 @@
     min-height: 0;
   }
 
-  .variables-table,
-  .console-shell {
+  .terminal-section {
+    max-height: calc(100vh - var(--mobile-terminal-viewport-offset));
+    max-height: calc(100dvh - var(--mobile-terminal-viewport-offset));
+    overflow: hidden;
+  }
+
+  .terminal-section .console-output {
+    overscroll-behavior: contain;
+  }
+
+  .variables-table {
     padding: 4px 8px 8px;
+  }
+
+  .terminal-section > .console-input {
+    margin: 0 8px 8px;
   }
 
   .table-head,
@@ -785,7 +809,7 @@
 
   .mobile-sidebar-tabs {
     gap: 0;
-    margin: 0 -1px;
+    margin: 0;
   }
 
   .mobile-sidebar-tab {
@@ -803,9 +827,12 @@
     font-size: 0.82rem;
   }
 
-  .variables-table,
-  .console-shell {
+  .variables-table {
     padding: 4px 6px 6px;
+  }
+
+  .terminal-section > .console-input {
+    margin: 0 6px 6px;
   }
 
   .table-head,
@@ -832,7 +859,6 @@
     min-height: 74px;
     gap: 5px;
     padding: 5px 6px;
-    border-radius: 10px;
   }
 
   .console-entry p {

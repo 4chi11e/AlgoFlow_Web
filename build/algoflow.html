@@ -2240,8 +2240,7 @@ button:disabled {
 }
 
 .sidebar-section,
-.variables-table,
-.console-shell {
+.variables-table {
   background: transparent;
   border: 0;
   border-radius: 0;
@@ -2307,11 +2306,17 @@ button:disabled {
 }
 
 .terminal-section {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 0;
   min-height: 0;
 }
 
-.variables-table,
-.console-shell {
+.terminal-section > .console-input {
+  margin: 0 12px 12px;
+}
+
+.variables-table {
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -2355,13 +2360,6 @@ button:disabled {
   color: var(--muted);
 }
 
-.console-shell {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 10px;
-  min-height: 0;
-}
-
 .console-status {
   display: inline-flex;
   align-items: center;
@@ -2397,9 +2395,9 @@ button:disabled {
   display: grid;
   gap: 8px;
   padding: 10px 12px;
-  border: 1px solid rgba(74, 58, 43, 0.22);
-  border-radius: 8px;
-  background: var(--panel-strong);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   align-content: start;
 }
 
@@ -2527,8 +2525,7 @@ button:disabled {
 }
 
 :root[data-theme="dark"] .console-output {
-  background: var(--panel-strong);
-  border-color: rgba(255, 255, 255, 0.08);
+  background: transparent;
 }
 
 :root[data-theme="dark"] .console-entry p {
@@ -2895,6 +2892,7 @@ button:disabled {
   <style data-inline-source="styles/responsive.css">
 @media (max-width: 1000px) {
   .app-shell {
+    --mobile-terminal-viewport-offset: 88px;
     padding: 6px;
     height: auto;
     min-height: 100vh;
@@ -3102,10 +3100,12 @@ button:disabled {
   }
 
   .mobile-sidebar-tabs {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: stretch;
     gap: 0;
-    margin: 0 -1px;
+    width: 100%;
+    margin: 0;
     padding: 0;
   }
 
@@ -3114,7 +3114,7 @@ button:disabled {
   }
 
   .mobile-sidebar-tab {
-    flex: 1 1 0;
+    width: 100%;
     margin: 0;
     padding: 0.5rem 0.7rem 0.46rem;
     font-size: 0.9rem;
@@ -3123,7 +3123,15 @@ button:disabled {
   }
 
   .mobile-sidebar-tab + .mobile-sidebar-tab {
-    margin-left: -1px;
+    border-left: 0;
+  }
+
+  .mobile-sidebar-tab:first-child {
+    border-left: 0;
+  }
+
+  .mobile-sidebar-tab:last-child {
+    border-right: 0;
   }
 
   .mobile-sidebar-tab::before {
@@ -3151,9 +3159,22 @@ button:disabled {
     min-height: 0;
   }
 
-  .variables-table,
-  .console-shell {
+  .terminal-section {
+    max-height: calc(100vh - var(--mobile-terminal-viewport-offset));
+    max-height: calc(100dvh - var(--mobile-terminal-viewport-offset));
+    overflow: hidden;
+  }
+
+  .terminal-section .console-output {
+    overscroll-behavior: contain;
+  }
+
+  .variables-table {
     padding: 4px 8px 8px;
+  }
+
+  .terminal-section > .console-input {
+    margin: 0 8px 8px;
   }
 
   .table-head,
@@ -3680,7 +3701,7 @@ button:disabled {
 
   .mobile-sidebar-tabs {
     gap: 0;
-    margin: 0 -1px;
+    margin: 0;
   }
 
   .mobile-sidebar-tab {
@@ -3698,9 +3719,12 @@ button:disabled {
     font-size: 0.82rem;
   }
 
-  .variables-table,
-  .console-shell {
+  .variables-table {
     padding: 4px 6px 6px;
+  }
+
+  .terminal-section > .console-input {
+    margin: 0 6px 6px;
   }
 
   .table-head,
@@ -3727,7 +3751,6 @@ button:disabled {
     min-height: 74px;
     gap: 5px;
     padding: 5px 6px;
-    border-radius: 10px;
   }
 
   .console-entry p {
@@ -4364,18 +4387,16 @@ button:disabled {
             <h3 id="terminal-title">Terminale</h3>
             <span class="console-status" id="terminal-status">Pronto</span>
           </div>
-          <div class="console-shell">
-            <div class="console-output" id="console-output">
-              <p class="console-empty">Nessun output</p>
-            </div>
-            <form class="console-input" id="console-input-form" hidden>
-              <label for="console-input-field" id="console-input-label">Input utente</label>
-              <div class="console-input-row">
-                <input type="text" id="console-input-field" autocomplete="off" placeholder="Scrivi qui...">
-                <button type="submit" class="console-submit-button" id="console-input-button">Invia</button>
-              </div>
-            </form>
+          <div class="console-output" id="console-output">
+            <p class="console-empty">Nessun output</p>
           </div>
+          <form class="console-input" id="console-input-form" hidden>
+            <label for="console-input-field" id="console-input-label">Input utente</label>
+            <div class="console-input-row">
+              <input type="text" id="console-input-field" autocomplete="off" placeholder="Scrivi qui...">
+              <button type="submit" class="console-submit-button" id="console-input-button">Invia</button>
+            </div>
+          </form>
         </section>
       </aside>
     </main>

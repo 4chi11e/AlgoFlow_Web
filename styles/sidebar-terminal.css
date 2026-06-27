@@ -68,8 +68,7 @@
 }
 
 .sidebar-section,
-.variables-table,
-.console-shell {
+.variables-table {
   background: transparent;
   border: 0;
   border-radius: 0;
@@ -135,11 +134,17 @@
 }
 
 .terminal-section {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 0;
   min-height: 0;
 }
 
-.variables-table,
-.console-shell {
+.terminal-section > .console-input {
+  margin: 0 12px 12px;
+}
+
+.variables-table {
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -183,13 +188,6 @@
   color: var(--muted);
 }
 
-.console-shell {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 10px;
-  min-height: 0;
-}
-
 .console-status {
   display: inline-flex;
   align-items: center;
@@ -225,9 +223,9 @@
   display: grid;
   gap: 8px;
   padding: 10px 12px;
-  border: 1px solid rgba(74, 58, 43, 0.22);
-  border-radius: 8px;
-  background: var(--panel-strong);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   align-content: start;
 }
 
