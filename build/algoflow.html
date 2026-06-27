@@ -2101,7 +2101,7 @@ button:disabled {
 
 .code-preview {
   margin: 0;
-  padding: 18px 20px;
+  padding: 18px 20px 18px 8px;
   flex: 1;
   min-height: 0;
   min-width: 0;
@@ -2126,13 +2126,40 @@ button:disabled {
 }
 
 .code-line {
-  display: block;
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--code-line-number-width, calc(0.7ch + 12px)) max-content;
+  align-items: baseline;
   min-width: 100%;
   width: max-content;
-  margin: 0 -8px;
-  padding: 0 8px;
+  margin: 0 -8px 0 0;
+  padding: 0 8px 0 0;
   border-radius: 6px;
   transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.code-line-number {
+  padding-right: 6px;
+  margin-right: 6px;
+  color: var(--muted);
+  font-size: 0.7em;
+  letter-spacing: -0.06em;
+  text-align: right;
+  user-select: none;
+}
+
+.code-line::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--code-line-number-width, calc(0.7ch + 12px)) - 6px);
+  border-left: 1px solid var(--line);
+  pointer-events: none;
+}
+
+.code-line-text {
+  min-width: 0;
 }
 
 .code-line.is-executing {
@@ -3253,7 +3280,7 @@ button:disabled {
   }
 
   .code-preview {
-    padding: 12px 14px;
+    padding: 12px 14px 12px 6px;
     font-size: calc(0.92rem * var(--code-zoom, 1));
     line-height: 1.65;
   }
@@ -3785,15 +3812,15 @@ button:disabled {
   }
 
   .code-preview {
-    padding: 10px 12px;
+    padding: 10px 12px 10px 4px;
     font-size: calc(0.84rem * var(--code-zoom, 1));
     line-height: 1.5;
     border-radius: 10px;
   }
 
   .code-line {
-    margin: 0 -6px;
-    padding: 0 6px;
+    margin: 0 -6px 0 0;
+    padding: 0 6px 0 0;
     border-radius: 6px;
   }
 
@@ -11456,11 +11483,14 @@ const renderCodePreview = () => {
 
   const codeDocument = buildProgramCodeDocument(selectedCodeLanguage);
   currentCodePreviewLines = codeDocument.lines;
+  const lineNumberDigits = String(Math.max(1, currentCodePreviewLines.length)).length;
+  const lineNumberTextWidth = (lineNumberDigits * 0.7).toFixed(2);
+  codePreviewContent.style.setProperty("--code-line-number-width", `calc(${lineNumberTextWidth}ch + 12px)`);
   codePreviewContent.innerHTML = currentCodePreviewLines
     .map((line, index) => {
       const isExecuting = line.nodeId != null && line.nodeId === executionCursor;
       const lineText = line.text.length > 0 ? escapeHtml(line.text) : "&nbsp;";
-      return `<span class="code-line${isExecuting ? " is-executing" : ""}" data-line-index="${index}"${line.nodeId != null ? ` data-node-id="${line.nodeId}"` : ""}>${lineText}</span>`;
+      return `<span class="code-line${isExecuting ? " is-executing" : ""}" data-line-index="${index}"${line.nodeId != null ? ` data-node-id="${line.nodeId}"` : ""}><span class="code-line-number" aria-hidden="true">${index + 1}</span><span class="code-line-text">${lineText}</span></span>`;
     })
     .join("");
   syncCodeExecutionHighlight();

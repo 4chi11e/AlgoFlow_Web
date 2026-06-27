@@ -21,7 +21,7 @@
 
 .code-preview {
   margin: 0;
-  padding: 18px 20px;
+  padding: 18px 20px 18px 8px;
   flex: 1;
   min-height: 0;
   min-width: 0;
@@ -46,13 +46,40 @@
 }
 
 .code-line {
-  display: block;
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--code-line-number-width, calc(0.7ch + 12px)) max-content;
+  align-items: baseline;
   min-width: 100%;
   width: max-content;
-  margin: 0 -8px;
-  padding: 0 8px;
+  margin: 0 -8px 0 0;
+  padding: 0 8px 0 0;
   border-radius: 6px;
   transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.code-line-number {
+  padding-right: 6px;
+  margin-right: 6px;
+  color: var(--muted);
+  font-size: 0.7em;
+  letter-spacing: -0.06em;
+  text-align: right;
+  user-select: none;
+}
+
+.code-line::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--code-line-number-width, calc(0.7ch + 12px)) - 6px);
+  border-left: 1px solid var(--line);
+  pointer-events: none;
+}
+
+.code-line-text {
+  min-width: 0;
 }
 
 .code-line.is-executing {

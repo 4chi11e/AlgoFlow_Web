@@ -708,11 +708,14 @@ const renderCodePreview = () => {
 
   const codeDocument = buildProgramCodeDocument(selectedCodeLanguage);
   currentCodePreviewLines = codeDocument.lines;
+  const lineNumberDigits = String(Math.max(1, currentCodePreviewLines.length)).length;
+  const lineNumberTextWidth = (lineNumberDigits * 0.7).toFixed(2);
+  codePreviewContent.style.setProperty("--code-line-number-width", `calc(${lineNumberTextWidth}ch + 12px)`);
   codePreviewContent.innerHTML = currentCodePreviewLines
     .map((line, index) => {
       const isExecuting = line.nodeId != null && line.nodeId === executionCursor;
       const lineText = line.text.length > 0 ? escapeHtml(line.text) : "&nbsp;";
-      return `<span class="code-line${isExecuting ? " is-executing" : ""}" data-line-index="${index}"${line.nodeId != null ? ` data-node-id="${line.nodeId}"` : ""}>${lineText}</span>`;
+      return `<span class="code-line${isExecuting ? " is-executing" : ""}" data-line-index="${index}"${line.nodeId != null ? ` data-node-id="${line.nodeId}"` : ""}><span class="code-line-number" aria-hidden="true">${index + 1}</span><span class="code-line-text">${lineText}</span></span>`;
     })
     .join("");
   syncCodeExecutionHighlight();
