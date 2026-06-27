@@ -9,7 +9,11 @@ const outputDir = path.join(rootDir, "build");
 const outputFile = path.join(outputDir, "algoflow.html");
 
 function readText(filePath) {
-  return fs.readFileSync(filePath, "utf8");
+  return fs.readFileSync(filePath, "utf8").replace(/^\uFEFF/, "");
+}
+
+function writeText(filePath, content) {
+  fs.writeFileSync(filePath, content, "utf8");
 }
 
 function isLocalReference(value) {
@@ -29,7 +33,7 @@ function resolveAsset(assetPath) {
 function inlineStyles(html) {
   return html.replace(
     /<link\b([^>]*?)\brel=["']stylesheet["']([^>]*?)>/gi,
-    (tag, beforeRel, afterRel) => {
+    (tag) => {
       const hrefMatch = tag.match(/\bhref=["']([^"']+)["']/i);
 
       if (!hrefMatch || !isLocalReference(hrefMatch[1])) {
@@ -45,21 +49,13 @@ function inlineStyles(html) {
 }
 
 function makeStandaloneScript(js) {
-  const stylesheetFile = path.join(rootDir, "styles.css");
-  const stylesheetDataUrl = `data:text/css;charset=utf-8,${encodeURIComponent(readText(stylesheetFile))}`;
-
-  return js
-    .replace(
-      /const stylesheetUrl = new URL\(["']styles\.css["'], window\.location\.href\)\.href;/g,
-      `const stylesheetUrl = ${JSON.stringify(stylesheetDataUrl)};`
-    )
-    .replace(/<\/script/gi, "<\\/script");
+  return js.replace(/<\/script/gi, "<\\/script");
 }
 
 function inlineScripts(html) {
   return html.replace(
     /<script\b([^>]*?)\bsrc=["']([^"']+)["']([^>]*)>\s*<\/script>/gi,
-    (tag, beforeSrc, src, afterSrc) => {
+    (tag, beforeSrc, src) => {
       if (!isLocalReference(src)) {
         return tag;
       }
@@ -77,7 +73,7 @@ function build() {
   const standaloneHtml = inlineScripts(inlineStyles(html));
 
   fs.mkdirSync(outputDir, { recursive: true });
-  fs.writeFileSync(outputFile, standaloneHtml, "utf8");
+  writeText(outputFile, standaloneHtml);
 
   console.log(`Standalone build creata: ${path.relative(rootDir, outputFile)}`);
 }

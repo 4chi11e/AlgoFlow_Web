@@ -1,0 +1,90 @@
+:root {
+  --app-surface: #fffaf2;
+  --bg: var(--app-surface);
+  --bg-accent: var(--app-surface);
+  --panel: var(--app-surface);
+  --panel-strong: var(--app-surface);
+  --diagram-surface: var(--app-surface);
+  --tab-inactive-bg: #e7d9c8;
+  --resizer-bg: #d2bfa7;
+  --resizer-bg-active: var(--primary);
+  --line: rgba(74, 58, 43, 0.22);
+  --surface-border: rgba(74, 58, 43, 0.24);
+  --control-bg: #fff7ec;
+  --control-bg-hover: #ffefdd;
+  --control-border: rgba(74, 58, 43, 0.3);
+  --text: #2f2419;
+  --muted: #6f6253;
+  --primary: #c45c2d;
+  --primary-dark: #9d471f;
+  --secondary: #1f5c5b;
+  --shadow: 0 20px 60px rgba(74, 58, 43, 0.16);
+  --radius-lg: 18px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+  --control-radius: 18px;
+  --workspace-sidebar-size: 380px;
+  --sidebar-top-size: 55%;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --app-surface: #11161d;
+  --bg: var(--app-surface);
+  --bg-accent: var(--app-surface);
+  --panel: var(--app-surface);
+  --panel-strong: var(--app-surface);
+  --diagram-surface: var(--app-surface);
+  --tab-inactive-bg: #202732;
+  --resizer-bg: #303947;
+  --resizer-bg-active: var(--primary);
+  --line: rgba(221, 228, 240, 0.12);
+  --surface-border: rgba(221, 228, 240, 0.12);
+  --control-bg: rgba(255, 255, 255, 0.06);
+  --control-bg-hover: rgba(255, 255, 255, 0.1);
+  --control-border: rgba(255, 255, 255, 0.1);
+  --text: #e7edf7;
+  --muted: #97a5b7;
+  --primary: #d37445;
+  --primary-dark: #ab572e;
+  --secondary: #7ac9c8;
+  --shadow: 0 24px 70px rgba(0, 0, 0, 0.34);
+  --control-radius: 18px;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--app-surface);
+}
+
+body {
+  font-family: "Manrope", sans-serif;
+  color: var(--text);
+  background: var(--app-surface);
+  background-image: none;
+}
+
+:root[data-theme="dark"] body {
+  background: var(--app-surface);
+  background-image: none;
+}
+
+body.is-drag-selecting {
+  user-select: none;
+}
+
+button,
+input {
+  font: inherit;
+}

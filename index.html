@@ -7,7 +7,16 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles/tokens.css">
+  <link rel="stylesheet" href="styles/topbar.css">
+  <link rel="stylesheet" href="styles/workspace.css">
+  <link rel="stylesheet" href="styles/diagram.css">
+  <link rel="stylesheet" href="styles/dialogs.css">
+  <link rel="stylesheet" href="styles/code-preview.css">
+  <link rel="stylesheet" href="styles/sidebar-terminal.css">
+  <link rel="stylesheet" href="styles/theme-dark.css">
+  <link rel="stylesheet" href="styles/console-input.css">
+  <link rel="stylesheet" href="styles/responsive.css">
 </head>
 <body>
   <div class="app-shell">
@@ -21,26 +30,41 @@
       </div>
       <div class="topbar-brand">
         <div class="topbar-brand-text">
-          <p class="eyebrow">Prototype</p>
-          <h1>AlgoFlow</h1>
+          <h1>
+            <span class="brand-full">AlgoFlow</span>
+            <span class="brand-mobile" aria-hidden="true">
+              <span class="brand-mobile-word">
+                <span>A</span>
+                <span>l</span>
+                <span>g</span>
+                <span>o</span>
+              </span>
+              <span class="brand-mobile-word">
+                <span>F</span>
+                <span>l</span>
+                <span>o</span>
+                <span>w</span>
+              </span>
+            </span>
+          </h1>
         </div>
-        <button
-          type="button"
-          class="ghost-button mobile-topbar-menu-toggle"
-          id="mobile-topbar-menu-toggle"
-          aria-controls="topbar-start-controls"
-          aria-expanded="false"
-          aria-label="Apri menu azioni"
-          hidden
-        >
-          ☰
-        </button>
       </div>
       <div class="topbar-group topbar-group-end">
         <button type="button" class="ghost-button" id="step-program-button" title="P">Passo</button>
         <button type="button" class="primary-button" id="run-program-button" title="E">Esegui</button>
         <button type="button" class="ghost-button" id="stop-program-button" title="Esc" disabled>Stop</button>
       </div>
+      <button
+        type="button"
+        class="ghost-button mobile-topbar-menu-toggle"
+        id="mobile-topbar-menu-toggle"
+        aria-controls="topbar-start-controls"
+        aria-expanded="false"
+        aria-label="Apri menu azioni"
+        hidden
+      >
+        ☰
+      </button>
     </header>
 
     <main class="workspace">
@@ -64,14 +88,23 @@
               </button>
             </div>
             <button type="button" class="ghost-button focus-toggle-button" id="focus-mode-button" title="F">Focus</button>
-            <label class="topbar-toggle folder-toggle" for="show-node-type-toggle">
+            <label class="topbar-toggle folder-toggle" for="show-node-type-toggle" title="Mostra nome nodo">
               <input type="checkbox" id="show-node-type-toggle">
-              <span>Mostra nome nodo</span>
+              <span>Nomi nodi</span>
+            </label>
+            <label class="language-select-label" for="code-language-select">
+              <span>Linguaggio</span>
+              <select id="code-language-select">
+                <option value="c">C</option>
+                <option value="cpp">C++</option>
+                <option value="python">Python</option>
+              </select>
             </label>
           </div>
         </div>
 
         <div class="main-content">
+          <div class="zoom-indicator" id="zoom-indicator" aria-live="polite" hidden></div>
           <section class="main-view is-active" id="diagram-view" role="tabpanel">
             <div class="diagram-canvas" id="diagram-canvas">
               <div class="flowchart-root" id="flowchart-root" aria-label="Diagramma iniziale"></div>
@@ -278,14 +311,6 @@
 
           <section class="main-view" id="code-view" role="tabpanel" hidden>
             <div class="code-canvas">
-              <div class="code-card">
-                <h3>Vista codice</h3>
-                <div class="language-tabs" role="tablist" aria-label="Selezione linguaggio">
-                  <button type="button" class="language-tab is-active" data-code-language="c" aria-selected="true">C</button>
-                  <button type="button" class="language-tab" data-code-language="cpp" aria-selected="false">C++</button>
-                  <button type="button" class="language-tab" data-code-language="python" aria-selected="false">Python</button>
-                </div>
-              </div>
               <pre class="code-preview"><code id="code-preview-content"></code></pre>
             </div>
           </section>
@@ -296,60 +321,86 @@
         <div class="workspace-resizer-handle"></div>
       </div>
 
-      <aside class="panel sidebar-panel" aria-label="Pannello laterale">
+      <aside class="panel sidebar-panel sidebar-content" aria-label="Pannello laterale">
         <div class="mobile-sidebar-tabs" role="tablist" aria-label="Vista pannello laterale">
           <button type="button" class="mobile-sidebar-tab is-active" data-sidebar-target="variables" aria-selected="true">Variabili</button>
           <button type="button" class="mobile-sidebar-tab" data-sidebar-target="terminal" aria-selected="false">Terminale</button>
         </div>
-        <div class="sidebar-content">
-          <section class="sidebar-section variables-section" aria-labelledby="variables-title">
-            <div class="section-heading">
-              <h3 id="variables-title">Variabili</h3>
-            </div>
-            <div class="variables-table">
-              <div class="table-head">
-                <span>Nome</span>
-                <span>Tipo</span>
-                <span>Valore</span>
-              </div>
-              <div class="variables-body" id="variables-body">
-                <div class="table-row muted">
-                  <span>Nessuna variabile</span>
-                  <span>-</span>
-                  <span>-</span>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <div class="sidebar-resizer" id="sidebar-resizer" aria-hidden="true">
-            <div class="sidebar-resizer-handle"></div>
+        <section class="sidebar-section variables-section" aria-labelledby="variables-title">
+          <div class="section-heading">
+            <h3 id="variables-title">Variabili</h3>
           </div>
-
-          <section class="sidebar-section terminal-section" aria-labelledby="terminal-title">
-            <div class="section-heading">
-              <h3 id="terminal-title">Terminale</h3>
-              <span class="console-status" id="terminal-status">Pronto</span>
+          <div class="variables-table">
+            <div class="table-head">
+              <span>Nome</span>
+              <span>Tipo</span>
+              <span>Valore</span>
             </div>
-            <div class="console-shell">
-              <div class="console-output" id="console-output">
-                <p class="console-empty">Nessun output</p>
+            <div class="variables-body" id="variables-body">
+              <div class="table-row muted">
+                <span>Nessuna variabile</span>
+                <span>-</span>
+                <span>-</span>
               </div>
-              <form class="console-input" id="console-input-form" hidden>
-                <label for="console-input-field" id="console-input-label">Input utente</label>
-                <div class="console-input-row">
-                  <input type="text" id="console-input-field" autocomplete="off" placeholder="Scrivi qui...">
-                  <button type="submit" class="console-submit-button" id="console-input-button">Invia</button>
-                </div>
-              </form>
             </div>
-          </section>
+          </div>
+        </section>
+
+        <div class="sidebar-resizer" id="sidebar-resizer" aria-hidden="true">
+          <div class="sidebar-resizer-handle"></div>
         </div>
+
+        <section class="sidebar-section terminal-section" aria-labelledby="terminal-title">
+          <div class="section-heading">
+            <h3 id="terminal-title">Terminale</h3>
+            <span class="console-status" id="terminal-status">Pronto</span>
+          </div>
+          <div class="console-output" id="console-output">
+            <p class="console-empty">Nessun output</p>
+          </div>
+          <form class="console-input" id="console-input-form" hidden>
+            <label for="console-input-field" id="console-input-label">Input utente</label>
+            <div class="console-input-row">
+              <input type="text" id="console-input-field" autocomplete="off" placeholder="Scrivi qui...">
+              <button type="submit" class="console-submit-button" id="console-input-button">Invia</button>
+            </div>
+          </form>
+        </section>
       </aside>
     </main>
   </div>
 
   <input type="file" id="load-diagram-input" accept=".algoflow.json,.json,.pdf,application/pdf,.fprg,application/xml,text/xml" hidden>
-  <script src="app.js"></script>
+  <script src="src/ui/dom-elements.js"></script>
+  <script src="src/app/config.js"></script>
+  <script src="src/diagram/node-definitions.js"></script>
+  <script src="src/app/state.js"></script>
+  <script src="src/ui/responsive-layout.js"></script>
+  <script src="src/diagram/model.js"></script>
+  <script src="src/io/file-picker.js"></script>
+  <script src="src/io/algoflow-format.js"></script>
+  <script src="src/io/flowgorithm-format.js"></script>
+  <script src="src/app/history.js"></script>
+  <script src="src/io/pdf-export.js"></script>
+  <script src="src/io/pdf-file.js"></script>
+  <script src="src/app/storage.js"></script>
+  <script src="src/app/preferences.js"></script>
+  <script src="src/ui/labels.js"></script>
+  <script src="src/ui/split-panes.js"></script>
+  <script src="src/shared/html.js"></script>
+  <script src="src/diagram/validation.js"></script>
+  <script src="src/runtime/panels.js"></script>
+  <script src="src/runtime/expressions.js"></script>
+  <script src="src/runtime/executor.js"></script>
+  <script src="src/render/variables-panel.js"></script>
+  <script src="src/render/html-flowchart.js"></script>
+  <script src="src/render/svg-layout.js"></script>
+  <script src="src/codegen/generator.js"></script>
+  <script src="src/render/flowchart-renderer.js"></script>
+  <script src="src/ui/insert-dialog.js"></script>
+  <script src="src/ui/property-dialog.js"></script>
+  <script src="src/diagram/actions.js"></script>
+  <script src="src/ui/event-bindings.js"></script>
+  <script src="src/app/bootstrap.js"></script>
 </body>
 </html>
