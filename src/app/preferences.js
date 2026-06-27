@@ -280,6 +280,31 @@ const saveCodeLanguagePreference = () => {
   }
 };
 
+const applyExecutionSpeedPreference = (nextDelay) => {
+  const normalizedDelay = Number(nextDelay);
+  runExecutionDelayMs = EXECUTION_SPEED_OPTIONS.has(normalizedDelay) ? normalizedDelay : 0;
+
+  if (executionSpeedSelect) {
+    executionSpeedSelect.value = String(runExecutionDelayMs);
+  }
+};
+
+const loadExecutionSpeedPreference = () => {
+  try {
+    applyExecutionSpeedPreference(window.localStorage.getItem(EXECUTION_SPEED_PREFERENCE_KEY));
+  } catch {
+    applyExecutionSpeedPreference(0);
+  }
+};
+
+const saveExecutionSpeedPreference = () => {
+  try {
+    window.localStorage.setItem(EXECUTION_SPEED_PREFERENCE_KEY, String(runExecutionDelayMs));
+  } catch {
+    // Ignore storage failures.
+  }
+};
+
 const syncThemeToggleButton = () => {
   if (!themeToggleButton) {
     return;

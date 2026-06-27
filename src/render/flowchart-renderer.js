@@ -1,5 +1,30 @@
 const renderSvgTopLevelNode = (node, y, path, centerX) => renderSvgNodeBlockAt(node, y, path, centerX);
 
+const syncDiagramExecutionHighlight = () => {
+  if (!flowchartRoot) {
+    return;
+  }
+
+  const activeNodes = flowchartRoot.querySelectorAll(".svg-node.is-executing");
+  const targetNodeId = executionCursor >= 0 ? String(executionCursor) : null;
+  const alreadySynced =
+    targetNodeId != null &&
+    activeNodes.length === 1 &&
+    activeNodes[0].getAttribute("data-node-id") === targetNodeId;
+
+  if (alreadySynced || (targetNodeId == null && activeNodes.length === 0)) {
+    return;
+  }
+
+  activeNodes.forEach((node) => node.classList.remove("is-executing"));
+
+  if (targetNodeId != null) {
+    flowchartRoot
+      .querySelector(`.svg-node[data-node-id="${targetNodeId}"]`)
+      ?.classList.add("is-executing");
+  }
+};
+
 const renderFlowchart = () => {
   const parts = [];
   const { width: canvasWidth, centerX } = getSvgCanvasMetrics();

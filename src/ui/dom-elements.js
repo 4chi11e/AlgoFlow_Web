@@ -19,6 +19,7 @@ const loadDiagramInput = document.querySelector("#load-diagram-input");
 const runProgramButton = document.querySelector("#run-program-button");
 const stepProgramButton = document.querySelector("#step-program-button");
 const stopProgramButton = document.querySelector("#stop-program-button");
+const executionSpeedSelect = document.querySelector("#execution-speed-select");
 const themeToggleButton = document.querySelector("#theme-toggle-button");
 const touchSelectionOverrideButton = document.querySelector("#touch-selection-override-button");
 const mobileTopbarMenuToggleButton = document.querySelector("#mobile-topbar-menu-toggle");

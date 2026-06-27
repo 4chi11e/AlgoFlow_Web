@@ -116,6 +116,7 @@ const addConsoleEntry = (kind, text, options = {}) => {
 };
 
 const refreshExecutionUi = () => {
+  syncDiagramExecutionHighlight();
   renderVariablesPanel();
   renderConsolePanel();
   syncCodeExecutionHighlight();
@@ -132,21 +133,64 @@ const renderConsolePanel = () => {
 
   if (consoleOutput) {
     if (!runtimeState || runtimeState.outputEntries.length === 0) {
-      consoleOutput.style.removeProperty("--console-line-number-width");
-      consoleOutput.innerHTML = '<p class="console-empty">Nessun output</p>';
+      if (consoleOutput.dataset.runtimeEmpty !== "true") {
+        consoleOutput.style.removeProperty("--console-line-number-width");
+        consoleOutput.innerHTML = '<p class="console-empty">Nessun output</p>';
+        consoleOutput.dataset.runtimeEmpty = "true";
+        consoleOutput.dataset.entryCount = "0";
+      }
     } else {
+      const renderedEntryCount = Number(consoleOutput.dataset.entryCount || "0");
+      const needsReset =
+        consoleOutput.dataset.runtimeEmpty === "true" ||
+        renderedEntryCount > runtimeState.outputEntries.length;
+
+      if (needsReset) {
+        consoleOutput.replaceChildren();
+        consoleOutput.dataset.entryCount = "0";
+      }
+
       const lineNumberDigits = String(runtimeState.outputEntries.length).length;
       const lineNumberTextWidth = (lineNumberDigits * 0.7).toFixed(2);
       consoleOutput.style.setProperty("--console-line-number-width", `calc(${lineNumberTextWidth}ch + 12px)`);
-      consoleOutput.innerHTML = runtimeState.outputEntries
-        .map((entry, index) => `
-          <div class="console-entry is-${escapeHtml(entry.kind)}">
-            <span class="console-line-number" aria-hidden="true">${index + 1}</span>
-            <p>${escapeHtml(entry.text)}</p>
-          </div>
-        `)
-        .join("");
-      consoleOutput.scrollTop = consoleOutput.scrollHeight;
+      const startIndex = needsReset ? 0 : renderedEntryCount;
+      const fragment = document.createDocumentFragment();
+      let outputChanged = needsReset;
+
+      for (let index = startIndex; index < runtimeState.outputEntries.length; index += 1) {
+        const entry = runtimeState.outputEntries[index];
+        const entryElement = document.createElement("div");
+        const lineNumberElement = document.createElement("span");
+        const messageElement = document.createElement("p");
+
+        entryElement.className = `console-entry is-${entry.kind}`;
+        lineNumberElement.className = "console-line-number";
+        lineNumberElement.setAttribute("aria-hidden", "true");
+        lineNumberElement.textContent = String(index + 1);
+        messageElement.textContent = entry.text;
+        entryElement.append(lineNumberElement, messageElement);
+        fragment.append(entryElement);
+      }
+
+      if (fragment.childNodes.length > 0) {
+        outputChanged = true;
+        consoleOutput.append(fragment);
+      } else {
+        const lastEntry = runtimeState.outputEntries[runtimeState.outputEntries.length - 1];
+        const lastMessage = consoleOutput.lastElementChild?.querySelector("p");
+
+        if (lastMessage && lastMessage.textContent !== lastEntry.text) {
+          lastMessage.textContent = lastEntry.text;
+          outputChanged = true;
+        }
+      }
+
+      consoleOutput.dataset.runtimeEmpty = "false";
+      consoleOutput.dataset.entryCount = String(runtimeState.outputEntries.length);
+
+      if (outputChanged) {
+        consoleOutput.scrollTop = consoleOutput.scrollHeight;
+      }
     }
   }
 
