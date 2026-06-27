@@ -639,6 +639,21 @@
     min-width: 0;
   }
 
+  .run-control {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .run-control #run-program-button {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .execution-speed-menu {
+    flex: 0 0 30px;
+    width: 30px;
+  }
+
   .app-shell.is-mobile-topbar-menu-open .topbar-group-start {
     display: grid;
     margin-bottom: 0;

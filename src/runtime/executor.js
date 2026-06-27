@@ -1,10 +1,16 @@
-const getRuntimeScope = () => {
+const runtimeCompiledExpressionCache = new Map();
+const runtimeAssignmentCache = new WeakMap();
+
+const getRuntimeScope = (referencedVariables = null) => {
   if (!runtimeState) {
     return {};
   }
 
+  const variableEntries = referencedVariables
+    ? Array.from(referencedVariables, (name) => [name, runtimeState.variableValues.get(name)])
+    : Array.from(runtimeState.variableValues.entries());
   const scope = Object.fromEntries(
-    Array.from(runtimeState.variableValues.entries()).map(([name, value]) => [
+    variableEntries.map(([name, value]) => [
       name,
       value === RUNTIME_UNDECLARED
         ? undefined
@@ -63,7 +69,14 @@ const evaluateRuntimeExpression = (expression) => {
   });
 
   try {
-    return Function("scope", `with (scope) { return (${normalizedExpression}); }`)(getRuntimeScope());
+    let evaluateExpression = runtimeCompiledExpressionCache.get(normalizedExpression);
+
+    if (!evaluateExpression) {
+      evaluateExpression = Function("scope", `with (scope) { return (${normalizedExpression}); }`);
+      runtimeCompiledExpressionCache.set(normalizedExpression, evaluateExpression);
+    }
+
+    return evaluateExpression(getRuntimeScope(referencedVariables));
   } catch (error) {
     if (error instanceof Error && !["ReferenceError", "SyntaxError"].includes(error.name)) {
       throw error;
@@ -409,6 +422,31 @@ const waitForNextStep = () =>
     refreshExecutionUi();
   });
 
+const finishPendingRunDelay = () => {
+  if (pendingRunDelayTimer != null) {
+    window.clearTimeout(pendingRunDelayTimer);
+    pendingRunDelayTimer = null;
+  }
+
+  if (typeof pendingRunDelayResolver === "function") {
+    const resolver = pendingRunDelayResolver;
+    pendingRunDelayResolver = null;
+    resolver();
+  }
+};
+
+const waitForRunDelay = (delayMs) =>
+  new Promise((resolve) => {
+    const finish = () => {
+      pendingRunDelayTimer = null;
+      pendingRunDelayResolver = null;
+      resolve();
+    };
+
+    pendingRunDelayResolver = finish;
+    pendingRunDelayTimer = window.setTimeout(finish, delayMs);
+  });
+
 const advanceStepExecution = () => {
   if (typeof pendingStepResolver !== "function") {
     return;
@@ -447,10 +485,12 @@ const cancelExecution = () => {
     resolver();
   }
 
+  finishPendingRunDelay();
   refreshExecutionUi();
 };
 
 const clearRuntimeSnapshot = () => {
+  finishPendingRunDelay();
   runtimeState = null;
   executionCursor = -1;
   executionMode = null;
@@ -471,6 +511,7 @@ const finalizeExecutionSession = (label, { keepCursor = false, tone = "success",
   executionMode = null;
   pendingStepResolver = null;
   pendingInputResolver = null;
+  finishPendingRunDelay();
 
   if (!keepCursor) {
     executionCursor = -1;
@@ -479,7 +520,6 @@ const finalizeExecutionSession = (label, { keepCursor = false, tone = "success",
     }
   }
 
-  renderFlowchart();
   refreshExecutionUi();
 };
 
@@ -502,11 +542,11 @@ const pauseBeforeNodeExecution = async (node) => {
   });
 
   if (executionMode === "step") {
-    renderFlowchart();
-    refreshExecutionUi();
     await waitForNextStep();
+  } else if (runExecutionDelayMs > 0) {
+    refreshExecutionUi();
+    await waitForRunDelay(runExecutionDelayMs);
   } else if (runtimeState.operationCount % RUN_MODE_UI_UPDATE_INTERVAL === 0) {
-    renderFlowchart();
     refreshExecutionUi();
     await new Promise((resolve) => window.setTimeout(resolve, 0));
   }
@@ -526,7 +566,16 @@ const executeRuntimeNodes = async (nodes) => {
       case "declare":
         break;
       case "assign": {
-        const parsedAssignment = parseAssignmentStatement(node.value);
+        const cachedAssignment = runtimeAssignmentCache.get(node);
+        let parsedAssignment = cachedAssignment?.parsed;
+
+        if (!cachedAssignment || cachedAssignment.source !== node.value) {
+          parsedAssignment = parseAssignmentStatement(node.value);
+          runtimeAssignmentCache.set(node, {
+            source: node.value,
+            parsed: parsedAssignment,
+          });
+        }
 
         if (!parsedAssignment) {
           throw new Error(`Assegnazione non valida nel nodo ${node.id}: usa =, +=, -=, *=, /= oppure %=.`);
@@ -639,9 +688,6 @@ const executeRuntimeNodes = async (nodes) => {
       default:
         throw new Error(`Il nodo di tipo "${node.type}" non è ancora supportato in esecuzione.`);
     }
-
-    renderFlowchart();
-    refreshExecutionUi();
   }
 };
 
@@ -658,7 +704,6 @@ const startProgramExecution = async (mode) => {
         tone: "success",
         detail: "Esecuzione in corso",
       });
-      refreshExecutionUi();
       advanceStepExecution();
     }
 
@@ -680,7 +725,6 @@ const startProgramExecution = async (mode) => {
   selectedNodeIds = new Set();
   previewSelectedNodeIds = new Set();
   renderFlowchart();
-  refreshExecutionUi();
 
   try {
     await executeRuntimeNodes(flowNodes);

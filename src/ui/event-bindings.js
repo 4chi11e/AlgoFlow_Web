@@ -764,6 +764,13 @@ if (stopProgramButton) {
   });
 }
 
+if (executionSpeedSelect) {
+  executionSpeedSelect.addEventListener("change", () => {
+    applyExecutionSpeedPreference(executionSpeedSelect.value);
+    saveExecutionSpeedPreference();
+  });
+}
+
 if (consoleInputForm) {
   consoleInputForm.addEventListener("submit", (event) => {
     event.preventDefault();

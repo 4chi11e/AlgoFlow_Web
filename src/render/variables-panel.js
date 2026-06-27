@@ -4,6 +4,18 @@ const renderVariablesPanel = () => {
   }
 
   const variables = runtimeState?.variableMeta ?? collectRuntimeVariableMeta();
+  const rows = Array.from(variables.values()).map((variable) => ({
+    name: variable.name,
+    typeLabel: variable.typeLabel,
+    value: runtimeState ? formatRuntimeValue(runtimeState.variableValues.get(variable.name)) : "",
+  }));
+  const renderSignature = JSON.stringify(rows);
+
+  if (variablesBody.dataset.renderSignature === renderSignature) {
+    return;
+  }
+
+  variablesBody.dataset.renderSignature = renderSignature;
 
   if (variables.size === 0) {
     variablesBody.innerHTML = `
@@ -16,16 +28,14 @@ const renderVariablesPanel = () => {
     return;
   }
 
-  variablesBody.innerHTML = Array.from(variables.values())
+  variablesBody.innerHTML = rows
     .map(
       (variable) => {
-        const runtimeValue = runtimeState?.variableValues.get(variable.name);
-
         return `
         <div class="table-row">
           <span>${escapeHtml(variable.name)}</span>
           <span>${escapeHtml(variable.typeLabel)}</span>
-          <span>${escapeHtml(runtimeState ? formatRuntimeValue(runtimeValue) : "")}</span>
+          <span>${escapeHtml(variable.value)}</span>
         </div>
       `;
       }
