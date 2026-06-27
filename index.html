@@ -51,7 +51,21 @@
       </div>
       <div class="topbar-group topbar-group-end">
         <button type="button" class="ghost-button" id="step-program-button" title="P">Passo</button>
-        <button type="button" class="primary-button" id="run-program-button" title="E">Esegui</button>
+        <div class="run-control">
+          <button type="button" class="primary-button" id="run-program-button" title="E">Esegui</button>
+          <label class="execution-speed-menu" title="Scegli velocità di esecuzione">
+            <span aria-hidden="true">▾</span>
+            <select id="execution-speed-select" aria-label="Velocità di esecuzione">
+              <option value="2000">2 s</option>
+              <option value="1000">1 s</option>
+              <option value="500">0,5 s</option>
+              <option value="250">0,25 s</option>
+              <option value="100">0,1 s</option>
+              <option value="50">0,05 s</option>
+              <option value="0" selected>Massima</option>
+            </select>
+          </label>
+        </div>
         <button type="button" class="ghost-button" id="stop-program-button" title="Esc" disabled>Stop</button>
       </div>
       <button
@@ -109,25 +123,25 @@
             <div class="diagram-canvas" id="diagram-canvas">
               <div class="flowchart-root" id="flowchart-root" aria-label="Diagramma iniziale"></div>
               <div class="selection-box" id="selection-box" hidden></div>
-              <div class="mobile-selection-controls" id="mobile-selection-controls" aria-label="Strumenti selezione mobile" hidden>
-                <button
-                  type="button"
-                  class="mobile-selection-button"
-                  id="mobile-multi-select-toggle"
-                  aria-pressed="false"
-                >
-                  Selezione multipla
-                </button>
-                <button
-                  type="button"
-                  class="mobile-selection-button mobile-selection-button-danger"
-                  id="mobile-delete-selection-button"
-                  disabled
-                >
-                  Elimina selezione
-                </button>
-              </div>
               <div class="canvas-grid" aria-hidden="true"></div>
+            </div>
+            <div class="mobile-selection-controls" id="mobile-selection-controls" aria-label="Strumenti selezione mobile" hidden>
+              <button
+                type="button"
+                class="mobile-selection-button"
+                id="mobile-multi-select-toggle"
+                aria-pressed="false"
+              >
+                Selezione multipla
+              </button>
+              <button
+                type="button"
+                class="mobile-selection-button mobile-selection-button-danger"
+                id="mobile-delete-selection-button"
+                disabled
+              >
+                Elimina selezione
+              </button>
             </div>
 
             <div class="insert-dialog-backdrop" id="insert-dialog-backdrop" hidden>

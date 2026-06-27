@@ -726,17 +726,25 @@ const syncCodeExecutionHighlight = () => {
     return;
   }
 
-  let firstActiveLine = null;
+  const activeLines = codePreviewContent.querySelectorAll(".code-line.is-executing");
+  const targetNodeId = executionCursor >= 0 ? String(executionCursor) : null;
+  const alreadySynced =
+    targetNodeId != null &&
+    activeLines.length > 0 &&
+    Array.from(activeLines).every((line) => line.getAttribute("data-node-id") === targetNodeId);
 
-  codePreviewContent.querySelectorAll(".code-line").forEach((lineElement) => {
-    const nodeId = Number(lineElement.getAttribute("data-node-id") ?? "");
-    const isExecuting = Number.isFinite(nodeId) && nodeId === executionCursor;
-    lineElement.classList.toggle("is-executing", isExecuting);
+  if (alreadySynced || (targetNodeId == null && activeLines.length === 0)) {
+    return;
+  }
 
-    if (isExecuting && !firstActiveLine) {
-      firstActiveLine = lineElement;
-    }
-  });
+  activeLines.forEach((line) => line.classList.remove("is-executing"));
+
+  const targetLines = targetNodeId == null
+    ? []
+    : codePreviewContent.querySelectorAll(`.code-line[data-node-id="${targetNodeId}"]`);
+
+  targetLines.forEach((line) => line.classList.add("is-executing"));
+  const firstActiveLine = targetLines[0];
 
   if (firstActiveLine instanceof HTMLElement) {
     firstActiveLine.scrollIntoView({

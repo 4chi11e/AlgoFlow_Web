@@ -132,6 +132,54 @@ input {
   justify-content: flex-end;
 }
 
+.run-control {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.run-control #run-program-button {
+  border-radius: var(--control-radius) 0 0 var(--control-radius);
+}
+
+.execution-speed-menu {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  border: 1px solid rgba(99, 45, 20, 0.45);
+  border-left: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 0 var(--control-radius) var(--control-radius) 0;
+  background: var(--primary);
+  color: #fffaf5;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.execution-speed-menu:hover {
+  background: var(--primary-dark);
+}
+
+.execution-speed-menu:focus-within {
+  outline: 2px solid var(--secondary);
+  outline-offset: 2px;
+}
+
+.execution-speed-menu span {
+  font-size: 0.8rem;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.execution-speed-menu select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
 .app-shell.is-topbar-start-overflow .topbar-group-start {
   flex-wrap: nowrap;
   gap: 4px;
@@ -260,6 +308,21 @@ h1 {
 .primary-button:hover {
   background: var(--primary-dark);
   border-color: rgba(75, 31, 12, 0.56);
+}
+
+:root:not([data-theme="dark"]) #run-program-button,
+:root:not([data-theme="dark"]) .execution-speed-menu {
+  background: #cf6532;
+  border-color: rgba(105, 43, 16, 0.42);
+}
+
+:root:not([data-theme="dark"]) .execution-speed-menu {
+  border-left-color: rgba(255, 255, 255, 0.34);
+}
+
+:root:not([data-theme="dark"]) #run-program-button:hover,
+:root:not([data-theme="dark"]) .execution-speed-menu:hover {
+  background: #b95329;
 }
 
 .topbar .topbar-toggle,
@@ -2114,7 +2177,7 @@ button:disabled {
   background: var(--panel-strong);
   font-family: "Space Grotesk", sans-serif;
   font-size: calc(1rem * var(--code-zoom, 1));
-  line-height: 1.8;
+  line-height: 1.45;
   white-space: pre;
   touch-action: pan-x pan-y;
 }
@@ -3309,7 +3372,7 @@ button:disabled {
   .code-preview {
     padding: 12px 14px 12px 6px;
     font-size: calc(0.92rem * var(--code-zoom, 1));
-    line-height: 1.65;
+    line-height: 1.35;
   }
 
   .insert-dialog-grid {
@@ -3586,6 +3649,21 @@ button:disabled {
     min-width: 0;
   }
 
+  .run-control {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .run-control #run-program-button {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .execution-speed-menu {
+    flex: 0 0 30px;
+    width: 30px;
+  }
+
   .app-shell.is-mobile-topbar-menu-open .topbar-group-start {
     display: grid;
     margin-bottom: 0;
@@ -3840,7 +3918,7 @@ button:disabled {
   .code-preview {
     padding: 10px 12px 10px 4px;
     font-size: calc(0.84rem * var(--code-zoom, 1));
-    line-height: 1.5;
+    line-height: 1.25;
     border-radius: 10px;
   }
 
@@ -4136,7 +4214,21 @@ button:disabled {
       </div>
       <div class="topbar-group topbar-group-end">
         <button type="button" class="ghost-button" id="step-program-button" title="P">Passo</button>
-        <button type="button" class="primary-button" id="run-program-button" title="E">Esegui</button>
+        <div class="run-control">
+          <button type="button" class="primary-button" id="run-program-button" title="E">Esegui</button>
+          <label class="execution-speed-menu" title="Scegli velocità di esecuzione">
+            <span aria-hidden="true">▾</span>
+            <select id="execution-speed-select" aria-label="Velocità di esecuzione">
+              <option value="2000">2 s</option>
+              <option value="1000">1 s</option>
+              <option value="500">0,5 s</option>
+              <option value="250">0,25 s</option>
+              <option value="100">0,1 s</option>
+              <option value="50">0,05 s</option>
+              <option value="0" selected>Massima</option>
+            </select>
+          </label>
+        </div>
         <button type="button" class="ghost-button" id="stop-program-button" title="Esc" disabled>Stop</button>
       </div>
       <button
@@ -4194,25 +4286,25 @@ button:disabled {
             <div class="diagram-canvas" id="diagram-canvas">
               <div class="flowchart-root" id="flowchart-root" aria-label="Diagramma iniziale"></div>
               <div class="selection-box" id="selection-box" hidden></div>
-              <div class="mobile-selection-controls" id="mobile-selection-controls" aria-label="Strumenti selezione mobile" hidden>
-                <button
-                  type="button"
-                  class="mobile-selection-button"
-                  id="mobile-multi-select-toggle"
-                  aria-pressed="false"
-                >
-                  Selezione multipla
-                </button>
-                <button
-                  type="button"
-                  class="mobile-selection-button mobile-selection-button-danger"
-                  id="mobile-delete-selection-button"
-                  disabled
-                >
-                  Elimina selezione
-                </button>
-              </div>
               <div class="canvas-grid" aria-hidden="true"></div>
+            </div>
+            <div class="mobile-selection-controls" id="mobile-selection-controls" aria-label="Strumenti selezione mobile" hidden>
+              <button
+                type="button"
+                class="mobile-selection-button"
+                id="mobile-multi-select-toggle"
+                aria-pressed="false"
+              >
+                Selezione multipla
+              </button>
+              <button
+                type="button"
+                class="mobile-selection-button mobile-selection-button-danger"
+                id="mobile-delete-selection-button"
+                disabled
+              >
+                Elimina selezione
+              </button>
             </div>
 
             <div class="insert-dialog-backdrop" id="insert-dialog-backdrop" hidden>
@@ -4478,6 +4570,7 @@ const loadDiagramInput = document.querySelector("#load-diagram-input");
 const runProgramButton = document.querySelector("#run-program-button");
 const stepProgramButton = document.querySelector("#step-program-button");
 const stopProgramButton = document.querySelector("#stop-program-button");
+const executionSpeedSelect = document.querySelector("#execution-speed-select");
 const themeToggleButton = document.querySelector("#theme-toggle-button");
 const touchSelectionOverrideButton = document.querySelector("#touch-selection-override-button");
 const mobileTopbarMenuToggleButton = document.querySelector("#mobile-topbar-menu-toggle");
@@ -4551,6 +4644,7 @@ const CODE_LANGUAGE_PREFERENCE_KEY = "algoflow-code-language";
 const CODE_ZOOM_PREFERENCE_KEY = "algoflow-code-zoom";
 const THEME_PREFERENCE_KEY = "algoflow-theme";
 const TOUCH_SELECTION_OVERRIDE_KEY = "algoflow-force-touch-selection-ui";
+const EXECUTION_SPEED_PREFERENCE_KEY = "algoflow-execution-speed";
 const ALGOFLOW_FILE_FORMAT = "algoflow";
 const ALGOFLOW_FILE_VERSION = 1;
 const ALGOFLOW_FILE_EXTENSION = ".algoflow.json";
@@ -4566,6 +4660,7 @@ const ALGOFLOW_PDF_PAYLOAD_BEGIN = "ALGOFLOW_PAYLOAD_BEGIN";
 const ALGOFLOW_PDF_PAYLOAD_END = "ALGOFLOW_PAYLOAD_END";
 const COMPACT_LAYOUT_BREAKPOINT = 1000;
 const MOBILE_TOPBAR_MENU_BREAKPOINT = 680;
+const EXECUTION_SPEED_OPTIONS = new Set([0, 50, 100, 250, 500, 1000, 2000]);
 const NOT_YET_IMPLEMENTED_MESSAGE = "Questa funzione al momento non è utilizzabile perché non è ancora stata sviluppata.";
 
 </script>
@@ -4697,6 +4792,9 @@ let executionMode = null;
 let runtimeState = null;
 let pendingStepResolver = null;
 let pendingInputResolver = null;
+let pendingRunDelayTimer = null;
+let pendingRunDelayResolver = null;
+let runExecutionDelayMs = 0;
 let isWorkspaceSplitManual = false;
 let isSidebarSplitManual = false;
 let pendingSidebarAutoSyncFrame = null;
@@ -7917,6 +8015,31 @@ const saveCodeLanguagePreference = () => {
   }
 };
 
+const applyExecutionSpeedPreference = (nextDelay) => {
+  const normalizedDelay = Number(nextDelay);
+  runExecutionDelayMs = EXECUTION_SPEED_OPTIONS.has(normalizedDelay) ? normalizedDelay : 0;
+
+  if (executionSpeedSelect) {
+    executionSpeedSelect.value = String(runExecutionDelayMs);
+  }
+};
+
+const loadExecutionSpeedPreference = () => {
+  try {
+    applyExecutionSpeedPreference(window.localStorage.getItem(EXECUTION_SPEED_PREFERENCE_KEY));
+  } catch {
+    applyExecutionSpeedPreference(0);
+  }
+};
+
+const saveExecutionSpeedPreference = () => {
+  try {
+    window.localStorage.setItem(EXECUTION_SPEED_PREFERENCE_KEY, String(runExecutionDelayMs));
+  } catch {
+    // Ignore storage failures.
+  }
+};
+
 const syncThemeToggleButton = () => {
   if (!themeToggleButton) {
     return;
@@ -8751,6 +8874,7 @@ const addConsoleEntry = (kind, text, options = {}) => {
 };
 
 const refreshExecutionUi = () => {
+  syncDiagramExecutionHighlight();
   renderVariablesPanel();
   renderConsolePanel();
   syncCodeExecutionHighlight();
@@ -8767,21 +8891,64 @@ const renderConsolePanel = () => {
 
   if (consoleOutput) {
     if (!runtimeState || runtimeState.outputEntries.length === 0) {
-      consoleOutput.style.removeProperty("--console-line-number-width");
-      consoleOutput.innerHTML = '<p class="console-empty">Nessun output</p>';
+      if (consoleOutput.dataset.runtimeEmpty !== "true") {
+        consoleOutput.style.removeProperty("--console-line-number-width");
+        consoleOutput.innerHTML = '<p class="console-empty">Nessun output</p>';
+        consoleOutput.dataset.runtimeEmpty = "true";
+        consoleOutput.dataset.entryCount = "0";
+      }
     } else {
+      const renderedEntryCount = Number(consoleOutput.dataset.entryCount || "0");
+      const needsReset =
+        consoleOutput.dataset.runtimeEmpty === "true" ||
+        renderedEntryCount > runtimeState.outputEntries.length;
+
+      if (needsReset) {
+        consoleOutput.replaceChildren();
+        consoleOutput.dataset.entryCount = "0";
+      }
+
       const lineNumberDigits = String(runtimeState.outputEntries.length).length;
       const lineNumberTextWidth = (lineNumberDigits * 0.7).toFixed(2);
       consoleOutput.style.setProperty("--console-line-number-width", `calc(${lineNumberTextWidth}ch + 12px)`);
-      consoleOutput.innerHTML = runtimeState.outputEntries
-        .map((entry, index) => `
-          <div class="console-entry is-${escapeHtml(entry.kind)}">
-            <span class="console-line-number" aria-hidden="true">${index + 1}</span>
-            <p>${escapeHtml(entry.text)}</p>
-          </div>
-        `)
-        .join("");
-      consoleOutput.scrollTop = consoleOutput.scrollHeight;
+      const startIndex = needsReset ? 0 : renderedEntryCount;
+      const fragment = document.createDocumentFragment();
+      let outputChanged = needsReset;
+
+      for (let index = startIndex; index < runtimeState.outputEntries.length; index += 1) {
+        const entry = runtimeState.outputEntries[index];
+        const entryElement = document.createElement("div");
+        const lineNumberElement = document.createElement("span");
+        const messageElement = document.createElement("p");
+
+        entryElement.className = `console-entry is-${entry.kind}`;
+        lineNumberElement.className = "console-line-number";
+        lineNumberElement.setAttribute("aria-hidden", "true");
+        lineNumberElement.textContent = String(index + 1);
+        messageElement.textContent = entry.text;
+        entryElement.append(lineNumberElement, messageElement);
+        fragment.append(entryElement);
+      }
+
+      if (fragment.childNodes.length > 0) {
+        outputChanged = true;
+        consoleOutput.append(fragment);
+      } else {
+        const lastEntry = runtimeState.outputEntries[runtimeState.outputEntries.length - 1];
+        const lastMessage = consoleOutput.lastElementChild?.querySelector("p");
+
+        if (lastMessage && lastMessage.textContent !== lastEntry.text) {
+          lastMessage.textContent = lastEntry.text;
+          outputChanged = true;
+        }
+      }
+
+      consoleOutput.dataset.runtimeEmpty = "false";
+      consoleOutput.dataset.entryCount = String(runtimeState.outputEntries.length);
+
+      if (outputChanged) {
+        consoleOutput.scrollTop = consoleOutput.scrollHeight;
+      }
     }
   }
 
@@ -9058,13 +9225,19 @@ const transformRandomFunctionCalls = (expression, transform) => {
 
 </script>
   <script data-inline-source="src/runtime/executor.js">
-const getRuntimeScope = () => {
+const runtimeCompiledExpressionCache = new Map();
+const runtimeAssignmentCache = new WeakMap();
+
+const getRuntimeScope = (referencedVariables = null) => {
   if (!runtimeState) {
     return {};
   }
 
+  const variableEntries = referencedVariables
+    ? Array.from(referencedVariables, (name) => [name, runtimeState.variableValues.get(name)])
+    : Array.from(runtimeState.variableValues.entries());
   const scope = Object.fromEntries(
-    Array.from(runtimeState.variableValues.entries()).map(([name, value]) => [
+    variableEntries.map(([name, value]) => [
       name,
       value === RUNTIME_UNDECLARED
         ? undefined
@@ -9123,7 +9296,14 @@ const evaluateRuntimeExpression = (expression) => {
   });
 
   try {
-    return Function("scope", `with (scope) { return (${normalizedExpression}); }`)(getRuntimeScope());
+    let evaluateExpression = runtimeCompiledExpressionCache.get(normalizedExpression);
+
+    if (!evaluateExpression) {
+      evaluateExpression = Function("scope", `with (scope) { return (${normalizedExpression}); }`);
+      runtimeCompiledExpressionCache.set(normalizedExpression, evaluateExpression);
+    }
+
+    return evaluateExpression(getRuntimeScope(referencedVariables));
   } catch (error) {
     if (error instanceof Error && !["ReferenceError", "SyntaxError"].includes(error.name)) {
       throw error;
@@ -9469,6 +9649,31 @@ const waitForNextStep = () =>
     refreshExecutionUi();
   });
 
+const finishPendingRunDelay = () => {
+  if (pendingRunDelayTimer != null) {
+    window.clearTimeout(pendingRunDelayTimer);
+    pendingRunDelayTimer = null;
+  }
+
+  if (typeof pendingRunDelayResolver === "function") {
+    const resolver = pendingRunDelayResolver;
+    pendingRunDelayResolver = null;
+    resolver();
+  }
+};
+
+const waitForRunDelay = (delayMs) =>
+  new Promise((resolve) => {
+    const finish = () => {
+      pendingRunDelayTimer = null;
+      pendingRunDelayResolver = null;
+      resolve();
+    };
+
+    pendingRunDelayResolver = finish;
+    pendingRunDelayTimer = window.setTimeout(finish, delayMs);
+  });
+
 const advanceStepExecution = () => {
   if (typeof pendingStepResolver !== "function") {
     return;
@@ -9507,10 +9712,12 @@ const cancelExecution = () => {
     resolver();
   }
 
+  finishPendingRunDelay();
   refreshExecutionUi();
 };
 
 const clearRuntimeSnapshot = () => {
+  finishPendingRunDelay();
   runtimeState = null;
   executionCursor = -1;
   executionMode = null;
@@ -9531,6 +9738,7 @@ const finalizeExecutionSession = (label, { keepCursor = false, tone = "success",
   executionMode = null;
   pendingStepResolver = null;
   pendingInputResolver = null;
+  finishPendingRunDelay();
 
   if (!keepCursor) {
     executionCursor = -1;
@@ -9539,7 +9747,6 @@ const finalizeExecutionSession = (label, { keepCursor = false, tone = "success",
     }
   }
 
-  renderFlowchart();
   refreshExecutionUi();
 };
 
@@ -9562,11 +9769,11 @@ const pauseBeforeNodeExecution = async (node) => {
   });
 
   if (executionMode === "step") {
-    renderFlowchart();
-    refreshExecutionUi();
     await waitForNextStep();
+  } else if (runExecutionDelayMs > 0) {
+    refreshExecutionUi();
+    await waitForRunDelay(runExecutionDelayMs);
   } else if (runtimeState.operationCount % RUN_MODE_UI_UPDATE_INTERVAL === 0) {
-    renderFlowchart();
     refreshExecutionUi();
     await new Promise((resolve) => window.setTimeout(resolve, 0));
   }
@@ -9586,7 +9793,16 @@ const executeRuntimeNodes = async (nodes) => {
       case "declare":
         break;
       case "assign": {
-        const parsedAssignment = parseAssignmentStatement(node.value);
+        const cachedAssignment = runtimeAssignmentCache.get(node);
+        let parsedAssignment = cachedAssignment?.parsed;
+
+        if (!cachedAssignment || cachedAssignment.source !== node.value) {
+          parsedAssignment = parseAssignmentStatement(node.value);
+          runtimeAssignmentCache.set(node, {
+            source: node.value,
+            parsed: parsedAssignment,
+          });
+        }
 
         if (!parsedAssignment) {
           throw new Error(`Assegnazione non valida nel nodo ${node.id}: usa =, +=, -=, *=, /= oppure %=.`);
@@ -9699,9 +9915,6 @@ const executeRuntimeNodes = async (nodes) => {
       default:
         throw new Error(`Il nodo di tipo "${node.type}" non è ancora supportato in esecuzione.`);
     }
-
-    renderFlowchart();
-    refreshExecutionUi();
   }
 };
 
@@ -9718,7 +9931,6 @@ const startProgramExecution = async (mode) => {
         tone: "success",
         detail: "Esecuzione in corso",
       });
-      refreshExecutionUi();
       advanceStepExecution();
     }
 
@@ -9740,7 +9952,6 @@ const startProgramExecution = async (mode) => {
   selectedNodeIds = new Set();
   previewSelectedNodeIds = new Set();
   renderFlowchart();
-  refreshExecutionUi();
 
   try {
     await executeRuntimeNodes(flowNodes);
@@ -9788,6 +9999,18 @@ const renderVariablesPanel = () => {
   }
 
   const variables = runtimeState?.variableMeta ?? collectRuntimeVariableMeta();
+  const rows = Array.from(variables.values()).map((variable) => ({
+    name: variable.name,
+    typeLabel: variable.typeLabel,
+    value: runtimeState ? formatRuntimeValue(runtimeState.variableValues.get(variable.name)) : "",
+  }));
+  const renderSignature = JSON.stringify(rows);
+
+  if (variablesBody.dataset.renderSignature === renderSignature) {
+    return;
+  }
+
+  variablesBody.dataset.renderSignature = renderSignature;
 
   if (variables.size === 0) {
     variablesBody.innerHTML = `
@@ -9800,16 +10023,14 @@ const renderVariablesPanel = () => {
     return;
   }
 
-  variablesBody.innerHTML = Array.from(variables.values())
+  variablesBody.innerHTML = rows
     .map(
       (variable) => {
-        const runtimeValue = runtimeState?.variableValues.get(variable.name);
-
         return `
         <div class="table-row">
           <span>${escapeHtml(variable.name)}</span>
           <span>${escapeHtml(variable.typeLabel)}</span>
-          <span>${escapeHtml(runtimeState ? formatRuntimeValue(runtimeValue) : "")}</span>
+          <span>${escapeHtml(variable.value)}</span>
         </div>
       `;
       }
@@ -11532,17 +11753,25 @@ const syncCodeExecutionHighlight = () => {
     return;
   }
 
-  let firstActiveLine = null;
+  const activeLines = codePreviewContent.querySelectorAll(".code-line.is-executing");
+  const targetNodeId = executionCursor >= 0 ? String(executionCursor) : null;
+  const alreadySynced =
+    targetNodeId != null &&
+    activeLines.length > 0 &&
+    Array.from(activeLines).every((line) => line.getAttribute("data-node-id") === targetNodeId);
 
-  codePreviewContent.querySelectorAll(".code-line").forEach((lineElement) => {
-    const nodeId = Number(lineElement.getAttribute("data-node-id") ?? "");
-    const isExecuting = Number.isFinite(nodeId) && nodeId === executionCursor;
-    lineElement.classList.toggle("is-executing", isExecuting);
+  if (alreadySynced || (targetNodeId == null && activeLines.length === 0)) {
+    return;
+  }
 
-    if (isExecuting && !firstActiveLine) {
-      firstActiveLine = lineElement;
-    }
-  });
+  activeLines.forEach((line) => line.classList.remove("is-executing"));
+
+  const targetLines = targetNodeId == null
+    ? []
+    : codePreviewContent.querySelectorAll(`.code-line[data-node-id="${targetNodeId}"]`);
+
+  targetLines.forEach((line) => line.classList.add("is-executing"));
+  const firstActiveLine = targetLines[0];
 
   if (firstActiveLine instanceof HTMLElement) {
     firstActiveLine.scrollIntoView({
@@ -11554,6 +11783,31 @@ const syncCodeExecutionHighlight = () => {
 </script>
   <script data-inline-source="src/render/flowchart-renderer.js">
 const renderSvgTopLevelNode = (node, y, path, centerX) => renderSvgNodeBlockAt(node, y, path, centerX);
+
+const syncDiagramExecutionHighlight = () => {
+  if (!flowchartRoot) {
+    return;
+  }
+
+  const activeNodes = flowchartRoot.querySelectorAll(".svg-node.is-executing");
+  const targetNodeId = executionCursor >= 0 ? String(executionCursor) : null;
+  const alreadySynced =
+    targetNodeId != null &&
+    activeNodes.length === 1 &&
+    activeNodes[0].getAttribute("data-node-id") === targetNodeId;
+
+  if (alreadySynced || (targetNodeId == null && activeNodes.length === 0)) {
+    return;
+  }
+
+  activeNodes.forEach((node) => node.classList.remove("is-executing"));
+
+  if (targetNodeId != null) {
+    flowchartRoot
+      .querySelector(`.svg-node[data-node-id="${targetNodeId}"]`)
+      ?.classList.add("is-executing");
+  }
+};
 
 const renderFlowchart = () => {
   const parts = [];
@@ -12846,6 +13100,13 @@ if (stopProgramButton) {
   });
 }
 
+if (executionSpeedSelect) {
+  executionSpeedSelect.addEventListener("change", () => {
+    applyExecutionSpeedPreference(executionSpeedSelect.value);
+    saveExecutionSpeedPreference();
+  });
+}
+
 if (consoleInputForm) {
   consoleInputForm.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -13000,6 +13261,7 @@ loadFlowchartState();
 loadHistoryState();
 loadCodeLanguagePreference();
 loadCodeZoomPreference();
+loadExecutionSpeedPreference();
 syncCodeLanguageTabs();
 syncFocusModeButton();
 syncMobileSidebarView();

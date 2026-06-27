@@ -99,6 +99,7 @@ loadFlowchartState();
 loadHistoryState();
 loadCodeLanguagePreference();
 loadCodeZoomPreference();
+loadExecutionSpeedPreference();
 syncCodeLanguageTabs();
 syncFocusModeButton();
 syncMobileSidebarView();
