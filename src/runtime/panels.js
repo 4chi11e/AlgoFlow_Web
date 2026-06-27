@@ -132,11 +132,16 @@ const renderConsolePanel = () => {
 
   if (consoleOutput) {
     if (!runtimeState || runtimeState.outputEntries.length === 0) {
+      consoleOutput.style.removeProperty("--console-line-number-width");
       consoleOutput.innerHTML = '<p class="console-empty">Nessun output</p>';
     } else {
+      const lineNumberDigits = String(runtimeState.outputEntries.length).length;
+      const lineNumberTextWidth = (lineNumberDigits * 0.7).toFixed(2);
+      consoleOutput.style.setProperty("--console-line-number-width", `calc(${lineNumberTextWidth}ch + 12px)`);
       consoleOutput.innerHTML = runtimeState.outputEntries
-        .map((entry) => `
+        .map((entry, index) => `
           <div class="console-entry is-${escapeHtml(entry.kind)}">
+            <span class="console-line-number" aria-hidden="true">${index + 1}</span>
             <p>${escapeHtml(entry.text)}</p>
           </div>
         `)

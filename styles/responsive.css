@@ -306,13 +306,12 @@
 
   .console-output {
     min-height: 88px;
-    gap: 6px;
-    padding: 6px 8px;
+    padding: 6px 8px 6px 4px;
   }
 
   .console-entry p {
     max-width: 92%;
-    padding: 6px 8px;
+    padding: 3px 6px;
     font-size: 0.92rem;
   }
 
@@ -857,14 +856,13 @@
 
   .console-output {
     min-height: 74px;
-    gap: 5px;
-    padding: 5px 6px;
+    padding: 5px 6px 5px 2px;
   }
 
   .console-entry p {
-    padding: 5px 7px;
+    padding: 2px 5px;
     font-size: 0.84rem;
-    border-radius: 10px;
+    border-radius: 6px;
   }
 
   .console-input label {

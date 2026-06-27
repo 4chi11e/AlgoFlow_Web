@@ -2420,8 +2420,8 @@ button:disabled {
   max-height: 100%;
   overflow: auto;
   display: grid;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: 0;
+  padding: 10px 12px 10px 6px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -2429,30 +2429,58 @@ button:disabled {
 }
 
 .console-entry {
-  display: flex;
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--console-line-number-width, calc(0.7ch + 12px)) minmax(0, 1fr);
+  align-items: baseline;
+  min-width: 0;
+  padding: 2px 0;
+}
+
+.console-line-number {
+  justify-self: stretch;
+  padding-right: 6px;
+  margin-right: 6px;
+  color: var(--muted);
+  font-size: 0.7em;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.06em;
+  text-align: right;
+  user-select: none;
+}
+
+.console-entry::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--console-line-number-width, calc(0.7ch + 12px)) - 6px);
+  border-left: 1px solid var(--line);
+  pointer-events: none;
 }
 
 .console-entry p {
   margin: 0;
-  line-height: 1.35;
+  line-height: 1.25;
   white-space: pre-wrap;
   word-break: break-word;
   max-width: min(85%, 420px);
-  padding: 8px 10px;
-  border-radius: 8px;
+  padding: 3px 6px;
+  border-radius: 6px;
   background: rgba(239, 228, 213, 0.66);
   color: var(--text);
 }
 
 .console-entry.is-output {
-  justify-content: flex-start;
+  justify-items: start;
 }
 
 .console-entry.is-input {
-  justify-content: flex-end;
+  justify-items: stretch;
 }
 
 .console-entry.is-input p {
+  justify-self: end;
   background: rgba(31, 92, 91, 0.14);
   color: var(--secondary);
 }
@@ -3225,13 +3253,12 @@ button:disabled {
 
   .console-output {
     min-height: 88px;
-    gap: 6px;
-    padding: 6px 8px;
+    padding: 6px 8px 6px 4px;
   }
 
   .console-entry p {
     max-width: 92%;
-    padding: 6px 8px;
+    padding: 3px 6px;
     font-size: 0.92rem;
   }
 
@@ -3776,14 +3803,13 @@ button:disabled {
 
   .console-output {
     min-height: 74px;
-    gap: 5px;
-    padding: 5px 6px;
+    padding: 5px 6px 5px 2px;
   }
 
   .console-entry p {
-    padding: 5px 7px;
+    padding: 2px 5px;
     font-size: 0.84rem;
-    border-radius: 10px;
+    border-radius: 6px;
   }
 
   .console-input label {
@@ -8741,11 +8767,16 @@ const renderConsolePanel = () => {
 
   if (consoleOutput) {
     if (!runtimeState || runtimeState.outputEntries.length === 0) {
+      consoleOutput.style.removeProperty("--console-line-number-width");
       consoleOutput.innerHTML = '<p class="console-empty">Nessun output</p>';
     } else {
+      const lineNumberDigits = String(runtimeState.outputEntries.length).length;
+      const lineNumberTextWidth = (lineNumberDigits * 0.7).toFixed(2);
+      consoleOutput.style.setProperty("--console-line-number-width", `calc(${lineNumberTextWidth}ch + 12px)`);
       consoleOutput.innerHTML = runtimeState.outputEntries
-        .map((entry) => `
+        .map((entry, index) => `
           <div class="console-entry is-${escapeHtml(entry.kind)}">
+            <span class="console-line-number" aria-hidden="true">${index + 1}</span>
             <p>${escapeHtml(entry.text)}</p>
           </div>
         `)
